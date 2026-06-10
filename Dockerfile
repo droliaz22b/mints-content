@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-ENV VITE_POCKETBASE_URL=http://pocketbase-pnnzwrbpikouced27hacq7mx.156.67.110.57.sslip.io:8080
+ENV VITE_POCKETBASE_URL=http://pocketbase-pnnzwrbpikouced27hacq7mx.156.67.110.57.sslip.io
 RUN npm run build
 
 FROM nginx:alpine
