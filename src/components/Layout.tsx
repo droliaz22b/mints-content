@@ -34,8 +34,7 @@ export default function Layout() {
             <div className="w-7 h-7 bg-black rounded-md flex items-center justify-center flex-shrink-0">
               <ChefHat size={15} className="text-white" />
             </div>
-            <span className="font-semibold text-sm tracking-tight">CreatorCMS</span>
-            <span className="text-gray-400 text-xs hidden md:block">Facebook video content workspace</span>
+            <span className="font-semibold text-sm tracking-tight">Mints CMS</span>
           </div>
 
           {/* Desktop nav */}

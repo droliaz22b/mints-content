@@ -29,7 +29,7 @@ export default function Login() {
           <div className="w-8 h-8 bg-black rounded-md flex items-center justify-center">
             <ChefHat size={18} className="text-white" />
           </div>
-          <span className="text-xl font-semibold tracking-tight">CreatorCMS</span>
+          <span className="text-xl font-semibold tracking-tight">Mints CMS</span>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
