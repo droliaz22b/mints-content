@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { pb } from '../lib/pocketbase'
 import type { RecipeStatus } from '../types'
 import { X, Upload, AlertCircle, CheckCircle2, FileUp } from 'lucide-react'
@@ -59,9 +60,30 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = ev => setInput(ev.target?.result as string ?? '')
-    reader.readAsText(file)
+    setError('')
+
+    const isXlsx = /\.(xlsx|xls)$/i.test(file.name)
+
+    if (isXlsx) {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+          const workbook = XLSX.read(data, { type: 'array' })
+          const sheet = workbook.Sheets[workbook.SheetNames[0]]
+          const csv = XLSX.utils.sheet_to_csv(sheet)
+          setInput(csv)
+        } catch {
+          setError('Failed to read Excel file. Make sure it is a valid .xlsx or .xls file.')
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => setInput(ev.target?.result as string ?? '')
+      reader.readAsText(file)
+    }
+
     e.target.value = ''
   }
 
@@ -72,9 +94,8 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
       const parsed = JSON.parse(input)
       return Array.isArray(parsed) ? parsed : [parsed]
     }
-    // CSV
     const lines = input.trim().split('\n').filter(l => l.trim())
-    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.')
+    if (lines.length < 2) throw new Error('File must have a header row and at least one data row.')
     const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/[\s.]/g, '_'))
     return lines.slice(1).map(line => {
       const vals = parseCSVLine(line)
@@ -129,7 +150,6 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
         try {
           const data = normalizeRow(rows[i])
           if (!data.recipe_name) { fail++; continue }
-          // upsert by sl_no: try update first, then create
           const existing = await pb.collection('recipes').getList(1, 1, { filter: `sl_no = ${data.sl_no}` })
           if (existing.items.length > 0) {
             await pb.collection('recipes').update(existing.items[0].id, data)
@@ -175,10 +195,10 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
 
           {tab === 'csv' && (
             <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <p className="font-medium mb-1">Expected CSV columns (header row required):</p>
+              <p className="font-medium mb-1">Expected columns (header row required):</p>
               <code className="font-mono text-gray-600 break-all">{CSV_TEMPLATE.split('\n')[0]}</code>
               <p className="mt-2">• <strong>sl_no</strong> is the unique key — existing records with same sl_no will be updated.</p>
-              <p>• Tags and platforms: comma-separated inside quotes: <code>"Snacks,Crispy"</code></p>
+              <p>• Tags and platforms: comma-separated: <code>"Snacks,Crispy"</code></p>
             </div>
           )}
 
@@ -190,16 +210,20 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
           )}
 
           {tab === 'csv' && (
-            <div className="flex items-center gap-3">
-              <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+            <div className="flex items-center gap-3 flex-wrap">
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={handleFile} className="hidden" />
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2 text-sm border border-dashed border-gray-300 rounded-lg hover:border-black hover:bg-gray-50 text-gray-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 text-sm border-2 border-dashed border-gray-300 rounded-xl hover:border-black hover:bg-gray-50 text-gray-600 transition-colors font-medium"
               >
-                <FileUp size={15} /> Upload .csv file
+                <FileUp size={16} /> Upload CSV or Excel file
               </button>
-              {fileName && <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">{fileName}</span>}
+              {fileName && (
+                <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                  <CheckCircle2 size={13} /> {fileName}
+                </span>
+              )}
             </div>
           )}
 
@@ -229,7 +253,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
           <button onClick={handleClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
           <button
             onClick={handleImport}
-            disabled={!input.trim() || !!progress && !done}
+            disabled={!input.trim() || (!!progress && !done)}
             className="flex items-center gap-2 px-5 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             <Upload size={14} /> Import
