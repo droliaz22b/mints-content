@@ -8,8 +8,16 @@ import PlatformPill from '../components/PlatformPill'
 import BulkAddModal from '../components/BulkAddModal'
 import {
   Search, Plus, Upload, Download, LayoutGrid, Table2, Columns3,
-  Pencil, Trash2, ChevronLeft, ChevronRight, AlertCircle, SlidersHorizontal, X,
+  Pencil, Trash2, AlertCircle, SlidersHorizontal, X, ArrowUpToLine, ArrowUpDown,
 } from 'lucide-react'
+
+const SORT_OPTIONS = [
+  { label: 'SL.No ↑',  value: '+sl_no' },
+  { label: 'SL.No ↓',  value: '-sl_no' },
+  { label: 'Name A-Z', value: '+recipe_name' },
+  { label: 'Name Z-A', value: '-recipe_name' },
+  { label: 'Latest',   value: '-created' },
+]
 
 const STATUSES: RecipeStatus[] = ['Draft', 'Ready', 'Edited', 'Posted', 'Uploaded', 'Done']
 const PLATFORMS = ['Facebook', 'YouTube', 'Instagram']
@@ -33,6 +41,7 @@ export default function Dashboard() {
   const [totalItems, setTotalItems] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
@@ -40,6 +49,7 @@ export default function Dashboard() {
   const [filterPlatform, setFilterPlatform] = useState('')
   const [filterCategories, setFilterCategories] = useState<string[]>([])
   const [filterTags, setFilterTags] = useState<string[]>([])
+  const [sortBy, setSortBy] = useState('+sl_no')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const [allTags, setAllTags] = useState<string[]>([])
@@ -50,8 +60,10 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
   useEffect(() => {
@@ -60,8 +72,18 @@ export default function Dashboard() {
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current) }
   }, [search])
 
+  // Scroll-to-top visibility
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 400)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const hasMore = recipes.length < totalItems
+
   const fetchRecipes = useCallback(async () => {
-    setLoading(true)
+    if (page === 1) setLoading(true)
+    else setLoadingMore(true)
     setError('')
     try {
       const filters: string[] = []
@@ -73,16 +95,30 @@ export default function Dashboard() {
 
       const result = await pb.collection('recipes').getList<Recipe>(page, PER_PAGE, {
         filter: filters.join(' && '),
-        sort: '+sl_no',
+        sort: sortBy,
       })
-      setRecipes(result.items)
+      setRecipes(prev => page === 1 ? result.items : [...prev, ...result.items])
       setTotalItems(result.totalItems)
     } catch {
       setError('Failed to load recipes.')
     } finally {
-      setLoading(false)
+      if (page === 1) setLoading(false)
+      else setLoadingMore(false)
     }
-  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategories, filterTags])
+  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategories, filterTags, sortBy])
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !loading && !loadingMore && hasMore) {
+        setPage(p => p + 1)
+      }
+    }, { rootMargin: '200px' })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loading, loadingMore, hasMore])
 
   useEffect(() => { fetchRecipes() }, [fetchRecipes])
 
@@ -169,7 +205,6 @@ export default function Dashboard() {
     else setSelected(new Set(recipes.map(r => r.id)))
   }
 
-  const totalPages = Math.ceil(totalItems / PER_PAGE)
 
   return (
     <div>
@@ -236,7 +271,7 @@ export default function Dashboard() {
           >
             <SlidersHorizontal size={14} />
           </button>
-          {/* Desktop filters inline */}
+          {/* Desktop filters + sort inline */}
           <div className="hidden sm:flex items-center gap-2">
             <select
               value={filterStatus}
@@ -254,16 +289,26 @@ export default function Dashboard() {
               <option value="">All platforms</option>
               {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
+            <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-2 bg-white shadow-sm">
+              <ArrowUpDown size={13} className="text-gray-400 flex-shrink-0" />
+              <select
+                value={sortBy}
+                onChange={e => { setSortBy(e.target.value); setPage(1) }}
+                className="text-sm bg-transparent outline-none cursor-pointer"
+              >
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Mobile filter panel */}
         {filtersOpen && (
-          <div className="sm:hidden flex gap-2 mt-2">
+          <div className="sm:hidden grid grid-cols-2 gap-2 mt-2">
             <select
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value as RecipeStatus | ''); setPage(1) }}
-              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
             >
               <option value="">All statuses</option>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -271,10 +316,17 @@ export default function Dashboard() {
             <select
               value={filterPlatform}
               onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}
-              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
             >
               <option value="">All platforms</option>
               {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select
+              value={sortBy}
+              onChange={e => { setSortBy(e.target.value); setPage(1) }}
+              className="col-span-2 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
+            >
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
         )}
@@ -424,25 +476,25 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-6 sm:mt-8">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="flex items-center gap-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
-          >
-            <ChevronLeft size={14} /> Prev
-          </button>
-          <span className="text-sm text-gray-600">{page} / {totalPages}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="flex items-center gap-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
-          >
-            Next <ChevronRight size={14} />
-          </button>
+      {/* Infinite scroll sentinel */}
+      <div ref={sentinelRef} className="h-4" />
+      {loadingMore && (
+        <div className="flex justify-center py-6">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
         </div>
+      )}
+      {!hasMore && recipes.length > 0 && !loading && (
+        <p className="text-center text-xs text-gray-400 py-6">All {totalItems.toLocaleString()} recipes loaded</p>
+      )}
+
+      {/* Scroll to top */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-all"
+        >
+          <ArrowUpToLine size={16} />
+        </button>
       )}
 
       {/* Delete confirm */}
