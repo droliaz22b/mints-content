@@ -1,8 +1,8 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
 import type { Recipe, RecipeStatus } from '../types'
-import { Save, X, AlertCircle, Loader2 } from 'lucide-react'
+import { Save, X, AlertCircle, Loader2, Hash } from 'lucide-react'
 
 const STATUSES: RecipeStatus[] = ['Draft', 'Ready', 'Edited', 'Posted', 'Uploaded', 'Done']
 const ALL_PLATFORMS = ['Facebook', 'YouTube', 'Instagram']
@@ -32,14 +32,34 @@ export default function RecipeEditor() {
 
   const [form, setForm] = useState(EMPTY)
   const [tagInput, setTagInput] = useState('')
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([])
+  const [allTags, setAllTags] = useState<string[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const tagRef = useRef<HTMLDivElement>(null)
 
+  // Load categories and tags
   useEffect(() => {
     pb.collection('categories').getFullList({ sort: 'name' }).then(res => setCategories(res.map(c => c.name as string))).catch(() => {})
+    pb.collection('tags').getFullList({ sort: 'name' }).then(res => setAllTags(res.map(t => t.name as string))).catch(() => {})
   }, [])
+
+  // Auto-increment SL.No for new recipes
+  useEffect(() => {
+    if (isEdit) return
+    pb.collection('recipes').getList<Recipe>(1, 1, { sort: '-sl_no' })
+      .then(res => { if (res.items.length > 0) setForm(prev => ({ ...prev, sl_no: res.items[0].sl_no + 1 })) })
+      .catch(() => {})
+  }, [isEdit])
+
+  // Tag autocomplete
+  useEffect(() => {
+    const q = tagInput.trim().toLowerCase()
+    if (!q) { setTagSuggestions([]); return }
+    setTagSuggestions(allTags.filter(t => t.toLowerCase().includes(q) && !form.tags.includes(t)).slice(0, 7))
+  }, [tagInput, allTags, form.tags])
 
   useEffect(() => {
     if (!id) return
@@ -78,10 +98,11 @@ export default function RecipeEditor() {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
-  function addTag() {
-    const t = tagInput.trim()
+  function addTag(name?: string) {
+    const t = (name ?? tagInput).trim()
     if (t && !form.tags.includes(t)) set('tags', [...form.tags, t])
     setTagInput('')
+    setTagSuggestions([])
   }
 
   function removeTag(t: string) {
@@ -140,16 +161,18 @@ export default function RecipeEditor() {
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Core Details</h2>
 
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <Field label="SL.No *" hint="Unique ID">
-              <input
-                type="number"
-                value={form.sl_no || ''}
-                onChange={e => set('sl_no', Number(e.target.value))}
-                className="input"
-                min={1}
-                placeholder="e.g. 1065"
-                required
-              />
+            <Field label="SL.No *" hint="auto-filled, editable">
+              <div className="relative">
+                <Hash size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="number"
+                  value={form.sl_no || ''}
+                  onChange={e => set('sl_no', Number(e.target.value))}
+                  className="input pl-7"
+                  min={1}
+                  required
+                />
+              </div>
             </Field>
             <Field label="Status *">
               <select value={form.status} onChange={e => set('status', e.target.value as RecipeStatus)} className="input">
@@ -185,16 +208,56 @@ export default function RecipeEditor() {
         {/* Tags */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={tagInput}
-              onChange={e => setTagInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
-              className="input flex-1"
-              placeholder="Type a tag and press Enter"
-            />
-            <button type="button" onClick={addTag} className="px-3 sm:px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0">Add</button>
+          <div className="flex gap-2" ref={tagRef}>
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); addTag() }
+                  if (e.key === 'Escape') setTagSuggestions([])
+                  if (e.key === 'ArrowDown' && tagSuggestions.length > 0) {
+                    e.preventDefault()
+                    const first = tagRef.current?.querySelector<HTMLButtonElement>('[data-suggestion]')
+                    first?.focus()
+                  }
+                }}
+                className="input"
+                placeholder="Type to search or add a new tag…"
+                autoComplete="off"
+              />
+              {tagSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {tagSuggestions.map((t, i) => (
+                    <button
+                      key={t}
+                      data-suggestion
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); addTag(t) }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); addTag(t) }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); (e.currentTarget.nextElementSibling as HTMLButtonElement)?.focus() }
+                        if (e.key === 'ArrowUp') { e.preventDefault(); i === 0 ? tagRef.current?.querySelector('input')?.focus() : (e.currentTarget.previousElementSibling as HTMLButtonElement)?.focus() }
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0" /> {t}
+                    </button>
+                  ))}
+                  {tagInput.trim() && !allTags.map(t => t.toLowerCase()).includes(tagInput.trim().toLowerCase()) && (
+                    <button
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); addTag() }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-500 border-t border-gray-100"
+                    >
+                      + Add "<span className="font-medium text-gray-800">{tagInput.trim()}</span>" as new tag
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={() => addTag()} className="px-3 sm:px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0">Add</button>
           </div>
           {form.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
