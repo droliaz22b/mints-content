@@ -275,37 +275,41 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Tag filter chips */}
-      {allTags.length > 0 && (
-        <div className="flex items-center gap-3 mb-2 -mx-3 px-3 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-none">
-          <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Top Tags</span>
-          <div className="flex gap-1.5 py-1">
-            {allTags.map(t => (
-              <TagPill
-                key={t} tag={t}
-                active={filterTags.includes(t)}
-                onClick={() => { setFilterTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1) }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Category filter chips */}
-      {allCategories.length > 0 && (
-        <div className="flex items-center gap-3 mb-4 -mx-3 px-3 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-none">
-          <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Categories</span>
-          <div className="flex gap-1.5 py-1">
-            {allCategories.map(c => (
-              <button
-                key={c}
-                onClick={() => { setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]); setPage(1) }}
-                className={`flex-shrink-0 text-xs px-3 py-1 rounded-full border font-medium transition-colors ${filterCategories.includes(c) ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+      {/* Tag + Category filter chips */}
+      {(allTags.length > 0 || allCategories.length > 0) && (
+        <div className="space-y-1.5 mb-4">
+          {allTags.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 sm:-mx-6 sm:px-6">
+              <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Top Tags</span>
+              <div className="flex gap-1.5 py-0.5">
+                {allTags.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setFilterTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1) }}
+                    className={`flex-shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium transition-colors whitespace-nowrap ${filterTags.includes(t) ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {allCategories.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 sm:-mx-6 sm:px-6">
+              <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Categories</span>
+              <div className="flex gap-1.5 py-0.5">
+                {allCategories.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => { setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]); setPage(1) }}
+                    className={`flex-shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium transition-colors whitespace-nowrap ${filterCategories.includes(c) ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'}`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
