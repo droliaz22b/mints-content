@@ -173,31 +173,28 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4 sm:mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Content Library</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 hidden sm:block">Manage your Facebook recipe videos — search, filter, and move them through your workflow.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
-            <span className="w-2 h-2 rounded-full bg-green-500" />
+      {/* Compact page header */}
+      <div className="flex items-center justify-between mb-2 sm:mb-4">
+        <h1 className="text-base sm:text-xl font-bold tracking-tight">Content Library</h1>
+        <div className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-2 py-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
             {totalItems.toLocaleString()}
           </span>
-          <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm border border-gray-200 bg-white rounded-lg px-3 py-1.5 hover:bg-gray-50">
-            <Download size={15} /> <span className="hidden sm:inline">Export</span>
+          <button onClick={exportCSV} title="Export CSV" className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 text-gray-600">
+            <Download size={15} />
           </button>
-          <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1.5 text-sm border border-gray-200 bg-white rounded-lg px-3 py-1.5 hover:bg-gray-50">
-            <Upload size={15} /> <span className="hidden sm:inline">Bulk Add</span>
+          <button onClick={() => setBulkOpen(true)} title="Bulk Import" className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 text-gray-600">
+            <Upload size={15} />
           </button>
-          <button onClick={() => navigate('/recipe/new')} className="flex items-center gap-1.5 text-sm bg-black text-white rounded-lg px-3 py-1.5 hover:bg-gray-800">
-            <Plus size={15} /> New
+          <button onClick={() => navigate('/recipe/new')} className="flex items-center gap-1 text-sm bg-black text-white rounded-lg px-3 py-1.5 hover:bg-gray-800 font-medium">
+            <Plus size={14} /> New
           </button>
         </div>
       </div>
 
-      {/* Status stats */}
-      <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3 mb-4 sm:mb-6">
+      {/* Status stats — horizontal scroll on mobile */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-7 sm:gap-3 mb-3 sm:mb-5 scrollbar-none">
         {(['Total', ...STATUSES] as const).map(s => {
           const count = statusCounts[s] ?? 0
           const total = statusCounts['Total'] || 1
@@ -206,76 +203,77 @@ export default function Dashboard() {
             <div
               key={s}
               onClick={() => s !== 'Total' && setFilterStatus(filterStatus === s ? '' : s as RecipeStatus)}
-              className={`bg-white border rounded-xl p-2.5 sm:p-4 ${s !== 'Total' ? 'cursor-pointer hover:border-gray-400 transition-colors' : ''} ${filterStatus === s ? 'border-black' : 'border-gray-200'}`}
+              className={`flex-shrink-0 bg-white border rounded-xl px-3 py-2 sm:p-4 min-w-[78px] sm:min-w-0 ${s !== 'Total' ? 'cursor-pointer hover:border-gray-400 transition-colors' : ''} ${filterStatus === s ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}
             >
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 truncate">{s}</p>
-              <p className={`text-lg sm:text-2xl font-bold ${s !== 'Total' ? STATUS_STAT_COLORS[s as RecipeStatus] : 'text-gray-900'}`}>{count.toLocaleString()}</p>
-              {pct !== null && <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">{pct}%</p>}
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{s}</p>
+              <p className={`text-xl sm:text-2xl font-bold leading-none ${s !== 'Total' ? STATUS_STAT_COLORS[s as RecipeStatus] : 'text-gray-900'}`}>{count.toLocaleString()}</p>
+              {pct !== null && <p className="text-[10px] text-gray-400 mt-0.5 hidden sm:block">{pct}%</p>}
             </div>
           )
         })}
       </div>
 
-      {/* Search + filter toggle */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex-1 relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search recipes…"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-          />
-        </div>
-        <button
-          onClick={() => setFiltersOpen(v => !v)}
-          className={`flex items-center gap-1.5 text-sm border rounded-lg px-3 py-2 sm:hidden transition-colors ${filtersOpen ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-gray-600'}`}
-        >
-          <SlidersHorizontal size={15} />
-        </button>
-        {/* Desktop filters inline */}
-        <div className="hidden sm:flex items-center gap-2">
-          <select
-            value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value as RecipeStatus | ''); setPage(1) }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none cursor-pointer"
+      {/* Sticky search bar */}
+      <div className="sticky top-14 z-20 bg-gray-50 py-2 -mx-3 px-3 sm:-mx-6 sm:px-6">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search recipes…"
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-black focus:border-transparent shadow-sm"
+            />
+          </div>
+          <button
+            onClick={() => setFiltersOpen(v => !v)}
+            className={`flex-shrink-0 flex items-center gap-1 text-sm border rounded-lg px-2.5 py-2 sm:hidden transition-colors ${filtersOpen ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-gray-600 shadow-sm'}`}
           >
-            <option value="">All statuses</option>
-            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={filterPlatform}
-            onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none cursor-pointer"
-          >
-            <option value="">All platforms</option>
-            {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <span className="text-sm text-gray-400 whitespace-nowrap">{totalItems.toLocaleString()} results</span>
+            <SlidersHorizontal size={14} />
+          </button>
+          {/* Desktop filters inline */}
+          <div className="hidden sm:flex items-center gap-2">
+            <select
+              value={filterStatus}
+              onChange={e => { setFilterStatus(e.target.value as RecipeStatus | ''); setPage(1) }}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none cursor-pointer shadow-sm"
+            >
+              <option value="">All statuses</option>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={filterPlatform}
+              onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none cursor-pointer shadow-sm"
+            >
+              <option value="">All platforms</option>
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         </div>
-      </div>
 
-      {/* Mobile filter panel */}
-      {filtersOpen && (
-        <div className="sm:hidden flex flex-col gap-2 mb-3 bg-white border border-gray-200 rounded-xl p-3">
-          <select
-            value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value as RecipeStatus | ''); setPage(1) }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
-          >
-            <option value="">All statuses</option>
-            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={filterPlatform}
-            onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
-          >
-            <option value="">All platforms</option>
-            {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-      )}
+        {/* Mobile filter panel */}
+        {filtersOpen && (
+          <div className="sm:hidden flex gap-2 mt-2">
+            <select
+              value={filterStatus}
+              onChange={e => { setFilterStatus(e.target.value as RecipeStatus | ''); setPage(1) }}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
+            >
+              <option value="">All statuses</option>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={filterPlatform}
+              onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none"
+            >
+              <option value="">All platforms</option>
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* Top tags */}
       {allTags.length > 0 && (
