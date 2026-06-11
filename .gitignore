@@ -5,3 +5,4 @@ dist
 *.xlsx
 pb/pb_data
 pb/pb_hooks
+scripts/
