@@ -1,12 +1,13 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
-import { ChefHat, ChevronDown, KeyRound, Users, LogOut } from 'lucide-react'
+import { ChefHat, ChevronDown, KeyRound, Users, LogOut, Menu, X, LayoutGrid, Settings } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
   const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,18 +28,18 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-screen-xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-black rounded-md flex items-center justify-center">
-                <ChefHat size={15} className="text-white" />
-              </div>
-              <span className="font-semibold text-sm tracking-tight">CreatorCMS</span>
-              <span className="text-gray-400 text-xs hidden sm:block">Facebook video content workspace</span>
+        <div className="max-w-screen-xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-black rounded-md flex items-center justify-center flex-shrink-0">
+              <ChefHat size={15} className="text-white" />
             </div>
+            <span className="font-semibold text-sm tracking-tight">CreatorCMS</span>
+            <span className="text-gray-400 text-xs hidden md:block">Facebook video content workspace</span>
           </div>
 
-          <nav className="flex items-center gap-1">
+          {/* Desktop nav */}
+          <nav className="hidden sm:flex items-center gap-1">
             <NavLink
               to="/"
               end
@@ -60,10 +61,7 @@ export default function Layout() {
             )}
 
             <div className="relative ml-2" ref={menuRef}>
-              <button
-                onClick={() => setMenuOpen(v => !v)}
-                className="flex items-center gap-1.5"
-              >
+              <button onClick={() => setMenuOpen(v => !v)} className="flex items-center gap-1.5">
                 <div className="w-8 h-8 rounded-full bg-gray-800 text-white text-sm font-medium flex items-center justify-center relative">
                   {initials}
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-white" />
@@ -82,34 +80,93 @@ export default function Layout() {
                       onClick={() => { navigate('/team'); setMenuOpen(false) }}
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                     >
-                      <Users size={14} />
-                      Team &amp; Users
+                      <Users size={14} /> Team &amp; Users
                     </button>
                   )}
                   <button
                     onClick={() => { navigate('/change-password'); setMenuOpen(false) }}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
-                    <KeyRound size={14} />
-                    Change Password
+                    <KeyRound size={14} /> Change Password
                   </button>
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                     >
-                      <LogOut size={14} />
-                      Sign Out
+                      <LogOut size={14} /> Sign Out
                     </button>
                   </div>
                 </div>
               )}
             </div>
           </nav>
+
+          {/* Mobile right side */}
+          <div className="flex sm:hidden items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-gray-800 text-white text-xs font-medium flex items-center justify-center">
+              {initials}
+            </div>
+            <button
+              onClick={() => setMobileOpen(v => !v)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+            >
+              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {mobileOpen && (
+          <div className="sm:hidden bg-white border-t border-gray-100 px-3 py-2 space-y-0.5">
+            <NavLink
+              to="/"
+              end
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-gray-100 text-black font-medium' : 'text-gray-600'}`
+              }
+            >
+              <LayoutGrid size={16} /> Dashboard
+            </NavLink>
+            {isAdmin && (
+              <NavLink
+                to="/masters"
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-gray-100 text-black font-medium' : 'text-gray-600'}`
+                }
+              >
+                <Settings size={16} /> Masters
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink
+                to="/team"
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-gray-100 text-black font-medium' : 'text-gray-600'}`
+                }
+              >
+                <Users size={16} /> Team &amp; Users
+              </NavLink>
+            )}
+            <div className="border-t border-gray-100 mt-1 pt-1">
+              <div className="px-3 py-1.5">
+                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-red-600 w-full"
+              >
+                <LogOut size={16} /> Sign Out
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-6 py-8">
+      <main className="max-w-screen-xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
         <Outlet />
       </main>
     </div>

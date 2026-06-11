@@ -145,14 +145,14 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
 1,Instant Kurkure,Snacks,"Snacks,Crispy",Reels,Short,RKK,Done,Done,Done,Recipe text here,Draft,"Facebook,Instagram"`
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
           <h2 className="font-semibold">Bulk Add / Import</h2>
           <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={18} /></button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4">
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
             {(['csv', 'json'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className={`px-4 py-1.5 text-sm rounded-md transition-colors ${tab === t ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>
@@ -199,7 +199,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
           )}
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <div className="flex justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
           <button onClick={handleClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
           <button
             onClick={handleImport}

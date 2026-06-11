@@ -70,16 +70,16 @@ export default function Team() {
   }
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="w-full max-w-2xl space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Team &amp; Users</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage who has access to view, edit, and create recipes in this workspace.</p>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Team &amp; Users</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Manage who has access to view, edit, and create recipes.</p>
       </div>
 
       {/* Add member form */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-700 mb-5">
-          <Plus size={15} /> Add Team Member
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-700 mb-4 sm:mb-5">
+          <Plus size={14} /> Add Team Member
         </h2>
 
         {createError && (
@@ -89,9 +89,9 @@ export default function Team() {
         )}
 
         <form onSubmit={createMember} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">New User Email</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Email</label>
               <input
                 type="email"
                 value={email}
@@ -115,9 +115,9 @@ export default function Team() {
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Role</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {ROLES.map(r => (
-                <label key={r} className={`flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer text-sm capitalize transition-colors ${role === r ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-gray-400'}`}>
+                <label key={r} className={`flex items-center gap-2 px-3 sm:px-4 py-2 border rounded-lg cursor-pointer text-sm capitalize transition-colors ${role === r ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-gray-400'}`}>
                   <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="sr-only" />
                   {r}
                 </label>
@@ -127,7 +127,7 @@ export default function Team() {
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Generated Temporary Password</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Temp Password</label>
               <button type="button" onClick={() => setPassword(randomPassword())} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
                 <RefreshCw size={12} /> Regenerate
               </button>
@@ -145,26 +145,24 @@ export default function Team() {
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1.5">
-              This password will be pre-registered on behalf of the user. They can change it after signing in.
-            </p>
+            <p className="text-xs text-gray-400 mt-1.5">User can change this after signing in.</p>
           </div>
 
           <button
             type="submit"
             disabled={creating}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            Create &amp; Invite User
+            Create &amp; Invite
           </button>
         </form>
       </div>
 
       {/* Members list */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Team Members</h2>
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-700">Team Members</h2>
           <span className="text-xs text-gray-400">{members.length} member{members.length !== 1 ? 's' : ''}</span>
         </div>
 
@@ -177,51 +175,53 @@ export default function Team() {
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Email Address</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Access Level</th>
-                <th className="px-6 py-3 w-12"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {members.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
-                        {(m.name || m.email).charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{m.email}</p>
-                        <p className="text-xs text-gray-400">
-                          Added {m.created ? new Date(m.created).toLocaleDateString() : 'Unknown date'}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <select
-                      value={m.role}
-                      onChange={e => updateRole(m.id, e.target.value as UserRole)}
-                      className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg bg-white outline-none cursor-pointer capitalize"
-                    >
-                      {ROLES.map(r => <option key={r} value={r} className="capitalize">{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button onClick={() => deleteMember(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[400px]">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Role</th>
+                  <th className="px-4 sm:px-6 py-3 w-12"></th>
                 </tr>
-              ))}
-              {members.length === 0 && (
-                <tr><td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-400">No team members yet.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {members.map(m => (
+                  <tr key={m.id} className="hover:bg-gray-50">
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs sm:text-sm font-medium text-gray-600 flex-shrink-0">
+                          {(m.name || m.email).charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{m.email}</p>
+                          <p className="text-xs text-gray-400 hidden sm:block">
+                            {m.created ? new Date(m.created).toLocaleDateString() : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <select
+                        value={m.role}
+                        onChange={e => updateRole(m.id, e.target.value as UserRole)}
+                        className="text-xs px-2 sm:px-3 py-1.5 border border-gray-200 rounded-lg bg-white outline-none cursor-pointer capitalize"
+                      >
+                        {ROLES.map(r => <option key={r} value={r} className="capitalize">{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <button onClick={() => deleteMember(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {members.length === 0 && (
+                  <tr><td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-400">No team members yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

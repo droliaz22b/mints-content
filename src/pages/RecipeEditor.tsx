@@ -68,7 +68,6 @@ export default function RecipeEditor() {
       .finally(() => setLoading(false))
   }, [id])
 
-  // Warn on unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', handler)
@@ -118,30 +117,30 @@ export default function RecipeEditor() {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400"><Loader2 size={24} className="animate-spin" /></div>
 
   return (
-    <div className="max-w-3xl">
-      <div className="flex items-center justify-between mb-8">
+    <div className="w-full max-w-3xl">
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{isEdit ? 'Edit Recipe' : 'New Recipe'}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{isEdit ? 'Edit Recipe' : 'New Recipe'}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{isEdit ? `Editing #${form.sl_no}` : 'Add a new recipe to the library'}</p>
         </div>
-        <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900">
-          <X size={16} /> Cancel
+        <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100">
+          <X size={16} />
         </button>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
+        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-5">
           <AlertCircle size={15} /> {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         {/* Core fields */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Core Details</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-4">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Core Details</h2>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="SL.No *" hint="Unique serial number — never changes">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Field label="SL.No *" hint="Unique ID">
               <input
                 type="number"
                 value={form.sl_no || ''}
@@ -170,7 +169,7 @@ export default function RecipeEditor() {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Field label="Category">
               <select value={form.category} onChange={e => set('category', e.target.value)} className="input">
                 <option value="">— Select —</option>
@@ -184,8 +183,8 @@ export default function RecipeEditor() {
         </div>
 
         {/* Tags */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
           <div className="flex gap-2">
             <input
               type="text"
@@ -195,7 +194,7 @@ export default function RecipeEditor() {
               className="input flex-1"
               placeholder="Type a tag and press Enter"
             />
-            <button type="button" onClick={addTag} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Add</button>
+            <button type="button" onClick={addTag} className="px-3 sm:px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0">Add</button>
           </div>
           {form.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
@@ -210,11 +209,11 @@ export default function RecipeEditor() {
         </div>
 
         {/* Platforms */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Platforms</h2>
-          <div className="flex gap-3">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Platforms</h2>
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             {ALL_PLATFORMS.map(p => (
-              <label key={p} className={`flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-colors text-sm ${form.platforms.includes(p) ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-gray-400'}`}>
+              <label key={p} className={`flex items-center gap-2 px-3 sm:px-4 py-2 border rounded-lg cursor-pointer transition-colors text-sm ${form.platforms.includes(p) ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-gray-400'}`}>
                 <input type="checkbox" checked={form.platforms.includes(p)} onChange={() => togglePlatform(p)} className="sr-only" />
                 {p}
               </label>
@@ -223,11 +222,11 @@ export default function RecipeEditor() {
         </div>
 
         {/* Social formats */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Social Details</h2>
-          <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-4">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Social Details</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <Field label="Instagram Format">
-              <input type="text" value={form.instagram_format} onChange={e => set('instagram_format', e.target.value)} className="input" placeholder="Reels, Feed, IGTV…" />
+              <input type="text" value={form.instagram_format} onChange={e => set('instagram_format', e.target.value)} className="input" placeholder="Reels, Feed…" />
             </Field>
             <Field label="YouTube Format">
               <input type="text" value={form.youtube_format} onChange={e => set('youtube_format', e.target.value)} className="input" placeholder="Short, Video…" />
@@ -242,9 +241,9 @@ export default function RecipeEditor() {
         </div>
 
         {/* Checklist */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Checklist</h2>
-          <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Checklist</h2>
+          <div className="flex flex-wrap gap-4 sm:gap-6">
             {(['docs', 'thumbnails', 'website_draft'] as const).map(field => (
               <label key={field} className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -260,8 +259,8 @@ export default function RecipeEditor() {
         </div>
 
         {/* Recipe copy */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
           <textarea
             value={form.recipe_copy}
             onChange={e => set('recipe_copy', e.target.value)}
@@ -271,12 +270,12 @@ export default function RecipeEditor() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pb-8">
-          <button type="button" onClick={() => navigate('/')} className="px-5 py-2.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className="flex justify-end gap-3 pb-6 sm:pb-8">
+          <button type="button" onClick={() => navigate('/')} className="px-4 sm:px-5 py-2.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
           >
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Recipe'}

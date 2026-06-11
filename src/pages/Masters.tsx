@@ -5,9 +5,9 @@ import { Plus, Trash2, Loader2, AlertCircle } from 'lucide-react'
 
 export default function Masters() {
   return (
-    <div className="max-w-3xl space-y-8">
+    <div className="w-full max-w-3xl space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Masters</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Masters</h1>
         <p className="text-sm text-gray-500 mt-0.5">Manage taxonomy — categories and tags used across all recipes.</p>
       </div>
       <CategoriesSection />
@@ -54,8 +54,8 @@ function CategoriesSection() {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
-      <h2 className="font-semibold text-sm uppercase tracking-wide text-gray-700 mb-4">Categories</h2>
+    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
+      <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-700 mb-4">Categories</h2>
       {error && <ErrorBanner msg={error} />}
       <form onSubmit={add} className="flex gap-2 mb-4">
         <input
@@ -132,21 +132,23 @@ function TagsSection() {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
-      <h2 className="font-semibold text-sm uppercase tracking-wide text-gray-700 mb-4">Tags</h2>
+    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
+      <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-700 mb-4">Tags</h2>
       {error && <ErrorBanner msg={error} />}
-      <form onSubmit={add} className="flex gap-2 mb-4">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          className="input flex-1"
-          placeholder="New tag name…"
-        />
-        <select value={color} onChange={e => setColor(e.target.value)} className="input w-28">
-          {TAG_COLORS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
+      <form onSubmit={add} className="space-y-2 mb-4">
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            className="input flex-1"
+            placeholder="New tag name…"
+          />
+          <select value={color} onChange={e => setColor(e.target.value)} className="input w-24 sm:w-28 flex-shrink-0">
+            {TAG_COLORS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
         <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add Tag
         </button>
       </form>
       {loading ? <Spinner /> : (
