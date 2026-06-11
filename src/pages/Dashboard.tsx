@@ -38,8 +38,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<RecipeStatus | ''>('')
   const [filterPlatform, setFilterPlatform] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
-  const [filterTag, setFilterTag] = useState('')
+  const [filterCategories, setFilterCategories] = useState<string[]>([])
+  const [filterTags, setFilterTags] = useState<string[]>([])
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const [allTags, setAllTags] = useState<string[]>([])
@@ -68,8 +68,8 @@ export default function Dashboard() {
       if (debouncedSearch) filters.push(`recipe_name ~ "${debouncedSearch}"`)
       if (filterStatus) filters.push(`status = "${filterStatus}"`)
       if (filterPlatform) filters.push(`platforms ~ "${filterPlatform}"`)
-      if (filterCategory) filters.push(`category = "${filterCategory}"`)
-      if (filterTag) filters.push(`tags ~ "${filterTag}"`)
+      if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `category = "${c}"`).join(' || ')})`)
+      if (filterTags.length > 0) filters.push(`(${filterTags.map(t => `tags ~ "${t}"`).join(' || ')})`)
 
       const result = await pb.collection('recipes').getList<Recipe>(page, PER_PAGE, {
         filter: filters.join(' && '),
@@ -82,7 +82,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategory, filterTag])
+  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategories, filterTags])
 
   useEffect(() => { fetchRecipes() }, [fetchRecipes])
 
@@ -275,29 +275,37 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Top tags */}
+      {/* Tag filter chips */}
       {allTags.length > 0 && (
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tags</span>
-          {allTags.slice(0, 14).map(t => (
-            <TagPill key={t} tag={t} active={filterTag === t} onClick={() => { setFilterTag(filterTag === t ? '' : t); setPage(1) }} />
-          ))}
+        <div className="flex items-center gap-3 mb-2 -mx-3 px-3 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-none">
+          <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Top Tags</span>
+          <div className="flex gap-1.5 py-1">
+            {allTags.map(t => (
+              <TagPill
+                key={t} tag={t}
+                active={filterTags.includes(t)}
+                onClick={() => { setFilterTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1) }}
+              />
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Category filter */}
+      {/* Category filter chips */}
       {allCategories.length > 0 && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cat</span>
-          {allCategories.map(c => (
-            <button
-              key={c}
-              onClick={() => { setFilterCategory(filterCategory === c ? '' : c); setPage(1) }}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${filterCategory === c ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
-            >
-              {c}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 mb-4 -mx-3 px-3 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-none">
+          <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Categories</span>
+          <div className="flex gap-1.5 py-1">
+            {allCategories.map(c => (
+              <button
+                key={c}
+                onClick={() => { setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]); setPage(1) }}
+                className={`flex-shrink-0 text-xs px-3 py-1 rounded-full border font-medium transition-colors ${filterCategories.includes(c) ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
