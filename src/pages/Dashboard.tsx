@@ -49,7 +49,7 @@ export default function Dashboard() {
   const [filterPlatform, setFilterPlatform] = useState('')
   const [filterCategories, setFilterCategories] = useState<string[]>([])
   const [filterTags, setFilterTags] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState('+sl_no')
+  const [sortBy, setSortBy] = useState('-sl_no')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const [allTags, setAllTags] = useState<string[]>([])
