@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { pb } from '../lib/pocketbase'
 import type { RecipeStatus } from '../types'
-import { X, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { X, Upload, AlertCircle, CheckCircle2, FileUp } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -49,9 +49,21 @@ function parseCSVLine(line: string): string[] {
 export default function BulkAddModal({ open, onClose, onDone }: Props) {
   const [tab, setTab] = useState<'json' | 'csv'>('csv')
   const [input, setInput] = useState('')
+  const [fileName, setFileName] = useState('')
   const [progress, setProgress] = useState('')
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = ev => setInput(ev.target?.result as string ?? '')
+    reader.readAsText(file)
+    e.target.value = ''
+  }
 
   if (!open) return null
 
@@ -137,7 +149,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
   }
 
   function handleClose() {
-    setInput(''); setProgress(''); setDone(false); setError('')
+    setInput(''); setFileName(''); setProgress(''); setDone(false); setError('')
     onClose()
   }
 
@@ -177,10 +189,24 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
             </div>
           )}
 
+          {tab === 'csv' && (
+            <div className="flex items-center gap-3">
+              <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 text-sm border border-dashed border-gray-300 rounded-lg hover:border-black hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                <FileUp size={15} /> Upload .csv file
+              </button>
+              {fileName && <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">{fileName}</span>}
+            </div>
+          )}
+
           <textarea
             value={input}
-            onChange={e => setInput(e.target.value)}
-            rows={10}
+            onChange={e => { setInput(e.target.value); if (e.target.value === '') setFileName('') }}
+            rows={8}
             className="w-full font-mono text-xs border border-gray-200 rounded-lg p-3 outline-none focus:ring-2 focus:ring-black resize-y"
             placeholder={tab === 'csv' ? CSV_TEMPLATE : '[{\n  "sl_no": 1,\n  "recipe_name": "Instant Kurkure",\n  ...\n}]'}
           />
