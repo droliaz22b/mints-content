@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { SettingsProvider } from './context/SettingsContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import RecipeEditor from './pages/RecipeEditor'
 import Masters from './pages/Masters'
 import Team from './pages/Team'
+import SiteSettings from './pages/SiteSettings'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
@@ -29,6 +31,7 @@ function AppRoutes() {
         <Route path="/recipe/:id/edit" element={<ProtectedRoute><RecipeEditor /></ProtectedRoute>} />
         <Route path="/masters" element={<ProtectedRoute adminOnly><Masters /></ProtectedRoute>} />
         <Route path="/team" element={<ProtectedRoute adminOnly><Team /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute adminOnly><SiteSettings /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -39,7 +42,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <SettingsProvider>
+          <AppRoutes />
+        </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>
   )

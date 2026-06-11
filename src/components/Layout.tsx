@@ -1,10 +1,12 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
-import { ChefHat, ChevronDown, KeyRound, Users, LogOut, Menu, X, LayoutGrid, Settings } from 'lucide-react'
+import { ChefHat, ChevronDown, KeyRound, Users, LogOut, Menu, X, LayoutGrid, Settings, SlidersHorizontal } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useSettings } from '../context/SettingsContext'
 
 export default function Layout() {
   const { user, logout, isAdmin } = useAuth()
+  const { settings, logoUrl } = useSettings()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -31,10 +33,11 @@ export default function Layout() {
         <div className="max-w-screen-xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-black rounded-md flex items-center justify-center flex-shrink-0">
-              <ChefHat size={15} className="text-white" />
-            </div>
-            <span className="font-semibold text-sm tracking-tight">Mints CMS</span>
+            {logoUrl
+              ? <img src={logoUrl} alt="logo" className="h-7 w-auto object-contain" />
+              : <div className="w-7 h-7 bg-black rounded-md flex items-center justify-center flex-shrink-0"><ChefHat size={15} className="text-white" /></div>
+            }
+            <span className="font-semibold text-sm tracking-tight">{settings?.site_title || 'Mints CMS'}</span>
           </div>
 
           {/* Desktop nav */}
@@ -80,6 +83,14 @@ export default function Layout() {
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                     >
                       <Users size={14} /> Team &amp; Users
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => { navigate('/settings'); setMenuOpen(false) }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <SlidersHorizontal size={14} /> Site Settings
                     </button>
                   )}
                   <button
@@ -148,6 +159,17 @@ export default function Layout() {
                 }
               >
                 <Users size={16} /> Team &amp; Users
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink
+                to="/settings"
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-gray-100 text-black font-medium' : 'text-gray-600'}`
+                }
+              >
+                <SlidersHorizontal size={16} /> Site Settings
               </NavLink>
             )}
             <div className="border-t border-gray-100 mt-1 pt-1">
