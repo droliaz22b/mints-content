@@ -142,7 +142,7 @@ export default function RecipeImport() {
     try {
       const dir = await picker({ mode: 'read' })
       const files: File[] = []
-      for await (const entry of (dir as unknown as AsyncIterable<FileSystemHandle>)) {
+      for await (const entry of (dir as unknown as { values(): AsyncIterable<FileSystemHandle> }).values()) {
         if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.docx')) {
           files.push(await (entry as FileSystemFileHandle).getFile())
         }
