@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
+import { preprocessToMarkdown } from '../lib/formatRecipe'
 import type { Recipe, RecipeStatus } from '../types'
 import StatusBadge from '../components/StatusBadge'
 import TagPill from '../components/TagPill'
@@ -725,7 +726,7 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
                 hr: () => <hr className="my-4 border-gray-200" />,
               }}
             >
-              {r.recipe_copy}
+              {preprocessToMarkdown(r.recipe_copy)}
             </ReactMarkdown>
           ) : (
             <p className="text-sm text-gray-400 italic">No recipe text added yet.</p>

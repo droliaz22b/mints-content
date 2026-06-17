@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
+import { preprocessToMarkdown, FORMAT_SYSTEM_PROMPT } from '../lib/formatRecipe'
 import type { Recipe, RecipeStatus } from '../types'
-import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus } from 'lucide-react'
+import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus, Sparkles } from 'lucide-react'
 
 const STATUSES: RecipeStatus[] = ['Draft', 'Ready', 'Edited', 'Posted', 'Uploaded', 'Done']
 const ALL_PLATFORMS = ['Facebook', 'YouTube', 'Instagram']
@@ -40,8 +41,40 @@ export default function RecipeEditor() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [recipeTab, setRecipeTab] = useState<'write' | 'preview'>('write')
+  const [aiFormatting, setAiFormatting] = useState(false)
   const tagRef = useRef<HTMLDivElement>(null)
   const copyRef = useRef<HTMLTextAreaElement>(null)
+
+  async function formatWithAI() {
+    const apiKey = localStorage.getItem('mints_openai_key')
+    if (!apiKey) {
+      alert('No OpenAI API key saved. Open Import Docs and enter your key first.')
+      return
+    }
+    if (!form.recipe_copy.trim()) return
+    setAiFormatting(true)
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: FORMAT_SYSTEM_PROMPT },
+            { role: 'user', content: `Recipe name: "${form.recipe_name}"\n\n${form.recipe_copy}` },
+          ],
+        }),
+      })
+      if (!res.ok) throw new Error(`OpenAI ${res.status}`)
+      const data = await res.json()
+      set('recipe_copy', data.choices[0].message.content.trim())
+      setRecipeTab('preview')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'AI formatting failed.')
+    } finally {
+      setAiFormatting(false)
+    }
+  }
 
   // Load categories and tags
   useEffect(() => {
@@ -326,11 +359,23 @@ export default function RecipeEditor() {
 
         {/* Recipe copy */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
-            <div className="flex bg-gray-100 rounded-lg p-0.5">
-              <button type="button" onClick={() => setRecipeTab('write')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'write' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Write</button>
-              <button type="button" onClick={() => setRecipeTab('preview')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'preview' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Preview</button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={formatWithAI}
+                disabled={aiFormatting || !form.recipe_copy.trim()}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 disabled:opacity-40"
+                title="Format with AI (requires OpenAI key from Import Docs)"
+              >
+                {aiFormatting ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                {aiFormatting ? 'Formatting…' : 'Format with AI'}
+              </button>
+              <div className="flex bg-gray-100 rounded-lg p-0.5">
+                <button type="button" onClick={() => setRecipeTab('write')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'write' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Write</button>
+                <button type="button" onClick={() => setRecipeTab('preview')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'preview' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Preview</button>
+              </div>
             </div>
           </div>
           {recipeTab === 'write' ? (
@@ -470,7 +515,7 @@ function MarkdownView({ content }: { content: string }) {
         hr: () => <hr className="my-4 border-gray-200" />,
       }}
     >
-      {content}
+      {preprocessToMarkdown(content)}
     </ReactMarkdown>
   )
 }
