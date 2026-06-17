@@ -212,6 +212,10 @@ Example output: paneer, onion, capsicum, maida`,
       } else {
         await pb.collection('recipes').create(form)
       }
+      // Sync any new tags to the tags collection so they appear in dashboard filters
+      const knownLower = new Set(allTags.map(t => t.toLowerCase()))
+      const newTags = form.tags.filter(t => !knownLower.has(t.toLowerCase()))
+      await Promise.allSettled(newTags.map(t => pb.collection('tags').create({ name: t })))
       navigate('/')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Save failed.'
