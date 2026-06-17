@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import type { Recipe, RecipeStatus } from '../types'
 import StatusBadge from '../components/StatusBadge'
@@ -61,6 +62,7 @@ export default function Dashboard() {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -450,6 +452,7 @@ export default function Dashboard() {
                   recipe={r}
                   selected={selected.has(r.id)}
                   onSelect={() => toggleSelect(r.id)}
+                  onPreview={() => setPreviewRecipe(r)}
                   onEdit={() => navigate(`/recipe/${r.id}/edit`)}
                   onDelete={() => setDeleteConfirmId(r.id)}
                 />
@@ -462,6 +465,7 @@ export default function Dashboard() {
               recipes={recipes}
               selected={selected}
               onSelect={toggleSelect}
+              onPreview={r => setPreviewRecipe(r)}
               onEdit={id => navigate(`/recipe/${id}/edit`)}
               onDelete={id => setDeleteConfirmId(id)}
             />
@@ -470,6 +474,7 @@ export default function Dashboard() {
           {viewMode === 'kanban' && (
             <KanbanView
               recipes={recipes}
+              onPreview={r => setPreviewRecipe(r)}
               onEdit={id => navigate(`/recipe/${id}/edit`)}
             />
           )}
@@ -512,19 +517,36 @@ export default function Dashboard() {
       )}
 
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} onDone={fetchRecipes} />
+
+      {previewRecipe && (
+        <RecipePreviewModal
+          recipe={previewRecipe}
+          onClose={() => setPreviewRecipe(null)}
+          onEdit={() => { navigate(`/recipe/${previewRecipe.id}/edit`); setPreviewRecipe(null) }}
+        />
+      )}
     </div>
   )
 }
 
 // ---- Recipe Card ----
-function RecipeCard({ recipe: r, selected, onSelect, onEdit, onDelete }: {
-  recipe: Recipe; selected: boolean; onSelect: () => void; onEdit: () => void; onDelete: () => void
+function RecipeCard({ recipe: r, selected, onSelect, onPreview, onEdit, onDelete }: {
+  recipe: Recipe; selected: boolean; onSelect: () => void; onPreview: () => void; onEdit: () => void; onDelete: () => void
 }) {
   return (
-    <div className={`bg-white border rounded-xl p-3 sm:p-4 flex flex-col gap-2.5 group relative ${selected ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}>
+    <div
+      onClick={onPreview}
+      className={`bg-white border rounded-xl p-3 sm:p-4 flex flex-col gap-2.5 group relative cursor-pointer hover:border-gray-400 transition-colors ${selected ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <input type="checkbox" checked={selected} onChange={onSelect} onClick={e => e.stopPropagation()} className="rounded mt-0.5" />
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelect}
+            onClick={e => e.stopPropagation()}
+            className="rounded mt-0.5"
+          />
           <span className="text-xs text-gray-400 font-medium">#{r.sl_no}</span>
         </div>
         <StatusBadge status={r.status} />
@@ -540,18 +562,17 @@ function RecipeCard({ recipe: r, selected, onSelect, onEdit, onDelete }: {
           {r.platforms.map(p => <PlatformPill key={p} platform={p} />)}
         </div>
       )}
-      {/* Actions: always visible on mobile, hover on desktop */}
       <div className="flex justify-end gap-1 mt-auto pt-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"><Pencil size={13} /></button>
-        <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+        <button onClick={e => { e.stopPropagation(); onEdit() }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"><Pencil size={13} /></button>
+        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
       </div>
     </div>
   )
 }
 
 // ---- Table View ----
-function RecipeTable({ recipes, selected, onSelect, onEdit, onDelete }: {
-  recipes: Recipe[]; selected: Set<string>; onSelect: (id: string) => void; onEdit: (id: string) => void; onDelete: (id: string) => void
+function RecipeTable({ recipes, selected, onSelect, onPreview, onEdit, onDelete }: {
+  recipes: Recipe[]; selected: Set<string>; onSelect: (id: string) => void; onPreview: (r: Recipe) => void; onEdit: (id: string) => void; onDelete: (id: string) => void
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -571,8 +592,14 @@ function RecipeTable({ recipes, selected, onSelect, onEdit, onDelete }: {
           </thead>
           <tbody>
             {recipes.map((r, i) => (
-              <tr key={r.id} className={`border-b border-gray-50 hover:bg-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}>
-                <td className="px-3 sm:px-4 py-3"><input type="checkbox" checked={selected.has(r.id)} onChange={() => onSelect(r.id)} className="rounded" /></td>
+              <tr
+                key={r.id}
+                onClick={() => onPreview(r)}
+                className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
+              >
+                <td className="px-3 sm:px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => onSelect(r.id)} className="rounded" />
+                </td>
                 <td className="px-3 sm:px-4 py-3 text-gray-400 font-mono text-xs">{r.sl_no}</td>
                 <td className="px-3 sm:px-4 py-3 font-medium max-w-[160px] sm:max-w-xs truncate">{r.recipe_name}</td>
                 <td className="px-3 sm:px-4 py-3 text-gray-500 hidden md:table-cell">{r.category}</td>
@@ -587,7 +614,7 @@ function RecipeTable({ recipes, selected, onSelect, onEdit, onDelete }: {
                   </div>
                 </td>
                 <td className="px-3 sm:px-4 py-3"><StatusBadge status={r.status} /></td>
-                <td className="px-3 sm:px-4 py-3">
+                <td className="px-3 sm:px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex gap-1">
                     <button onClick={() => onEdit(r.id)} className="p-1 rounded hover:bg-gray-200 text-gray-400"><Pencil size={13} /></button>
                     <button onClick={() => onDelete(r.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
@@ -603,7 +630,7 @@ function RecipeTable({ recipes, selected, onSelect, onEdit, onDelete }: {
 }
 
 // ---- Kanban View ----
-function KanbanView({ recipes, onEdit }: { recipes: Recipe[]; onEdit: (id: string) => void }) {
+function KanbanView({ recipes, onPreview, onEdit }: { recipes: Recipe[]; onPreview: (r: Recipe) => void; onEdit: (id: string) => void }) {
   const byStatus = STATUSES.reduce<Record<string, Recipe[]>>((acc, s) => {
     acc[s] = recipes.filter(r => r.status === s)
     return acc
@@ -621,10 +648,18 @@ function KanbanView({ recipes, onEdit }: { recipes: Recipe[]; onEdit: (id: strin
             {byStatus[s].map(r => (
               <div
                 key={r.id}
-                onClick={() => onEdit(r.id)}
-                className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-gray-400 transition-colors"
+                onClick={() => onPreview(r)}
+                className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-gray-400 transition-colors group"
               >
-                <p className="text-xs text-gray-400 mb-1">#{r.sl_no}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-gray-400">#{r.sl_no}</p>
+                  <button
+                    onClick={e => { e.stopPropagation(); onEdit(r.id) }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-100 text-gray-400"
+                  >
+                    <Pencil size={11} />
+                  </button>
+                </div>
                 <p className="text-sm font-medium line-clamp-2">{r.recipe_name}</p>
                 {(r.tags?.length > 0) && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -639,6 +674,75 @@ function KanbanView({ recipes, onEdit }: { recipes: Recipe[]; onEdit: (id: strin
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ---- Recipe Preview Modal ----
+function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; onClose: () => void; onEdit: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-4 p-5 sm:p-6 border-b border-gray-100">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-gray-400 font-mono">#{r.sl_no}</span>
+              <StatusBadge status={r.status} />
+              {r.category && <span className="text-xs text-gray-400">{r.category}</span>}
+            </div>
+            <h2 className="text-lg font-bold leading-snug">{r.recipe_name}</h2>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tags + platforms */}
+        {((r.tags?.length > 0) || (r.platforms?.length > 0)) && (
+          <div className="px-5 sm:px-6 py-3 border-b border-gray-100 flex flex-wrap gap-1.5">
+            {(r.tags || []).map(t => <TagPill key={t} tag={t} size="xs" />)}
+            {(r.platforms || []).map(p => <PlatformPill key={p} platform={p} />)}
+          </div>
+        )}
+
+        {/* Recipe text */}
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
+          {r.recipe_copy ? (
+            <ReactMarkdown
+              components={{
+                h1: ({ children }) => <h1 className="text-lg font-bold mb-3 mt-5 first:mt-0 text-gray-900">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h3>,
+                strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                ul: ({ children }) => <ul className="list-disc list-outside ml-5 my-3 space-y-1.5">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-outside ml-5 my-3 space-y-1.5">{children}</ol>,
+                li: ({ children }) => <li className="text-gray-700 text-sm leading-relaxed">{children}</li>,
+                p: ({ children }) => <p className="text-sm text-gray-700 mb-3 leading-relaxed">{children}</p>,
+                hr: () => <hr className="my-4 border-gray-200" />,
+              }}
+            >
+              {r.recipe_copy}
+            </ReactMarkdown>
+          ) : (
+            <p className="text-sm text-gray-400 italic">No recipe text added yet.</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-5 sm:px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800"
+          >
+            <Pencil size={13} /> Edit Recipe
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

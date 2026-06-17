@@ -76,8 +76,26 @@ async function formatWithAI(rawText: string, recipeName: string, apiKey: string)
       messages: [
         {
           role: 'system',
-          content:
-            'You are a recipe editor. Format and grammar-check recipe text. Fix spelling and grammar. Use clear headings: Ingredients and Method. Keep all original content — do not add or remove anything. Clean up spacing. Keep a friendly cooking tone. Output plain text only, no markdown symbols like ** or ##.',
+          content: `You are a recipe editor. Format and fix the grammar of recipe text.
+
+Output using this exact structure:
+
+**Ingredients:**
+- ingredient with quantity
+- ingredient with quantity
+
+**Method:**
+1. Clear step
+2. Clear step
+
+Rules:
+- Use **Ingredients:** and **Method:** as bold headings with a colon
+- List every ingredient as a bullet point starting with -
+- Number every method step (1. 2. 3.)
+- Fix all grammar and spelling errors
+- Keep all original content — do not add or remove ingredients or steps
+- Clean up spacing and punctuation
+- Use only markdown formatting (**, -, 1.) — no HTML`,
         },
         { role: 'user', content: `Recipe name: "${recipeName}"\n\n${rawText}` },
       ],

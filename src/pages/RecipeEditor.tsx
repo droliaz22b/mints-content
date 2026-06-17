@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import type { Recipe, RecipeStatus } from '../types'
-import { Save, X, AlertCircle, Loader2, Hash } from 'lucide-react'
+import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus } from 'lucide-react'
 
 const STATUSES: RecipeStatus[] = ['Draft', 'Ready', 'Edited', 'Posted', 'Uploaded', 'Done']
 const ALL_PLATFORMS = ['Facebook', 'YouTube', 'Instagram']
@@ -38,7 +39,9 @@ export default function RecipeEditor() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [recipeTab, setRecipeTab] = useState<'write' | 'preview'>('write')
   const tagRef = useRef<HTMLDivElement>(null)
+  const copyRef = useRef<HTMLTextAreaElement>(null)
 
   // Load categories and tags
   useEffect(() => {
@@ -323,13 +326,33 @@ export default function RecipeEditor() {
 
         {/* Recipe copy */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
-          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
-          <textarea
-            value={form.recipe_copy}
-            onChange={e => set('recipe_copy', e.target.value)}
-            className="input w-full h-32 resize-y"
-            placeholder="Paste or write the recipe text here…"
-          />
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button type="button" onClick={() => setRecipeTab('write')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'write' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Write</button>
+              <button type="button" onClick={() => setRecipeTab('preview')} className={`px-3 py-1 text-xs rounded-md transition-colors ${recipeTab === 'preview' ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Preview</button>
+            </div>
+          </div>
+          {recipeTab === 'write' ? (
+            <>
+              <FormatToolbar textareaRef={copyRef} value={form.recipe_copy} onChange={v => set('recipe_copy', v)} />
+              <textarea
+                ref={copyRef}
+                value={form.recipe_copy}
+                onChange={e => set('recipe_copy', e.target.value)}
+                className="input w-full font-mono text-sm leading-relaxed resize-y"
+                style={{ minHeight: '360px' }}
+                placeholder={"**Ingredients:**\n- \n\n**Method:**\n1. "}
+              />
+            </>
+          ) : (
+            <div className="min-h-[360px] bg-gray-50 rounded-xl p-4 sm:p-5 text-sm text-gray-700">
+              {form.recipe_copy
+                ? <MarkdownView content={form.recipe_copy} />
+                : <p className="text-gray-400 italic">Nothing to preview yet.</p>
+              }
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -358,5 +381,96 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       </label>
       {children}
     </div>
+  )
+}
+
+function FormatToolbar({ textareaRef, value, onChange }: {
+  textareaRef: React.RefObject<HTMLTextAreaElement>
+  value: string
+  onChange: (v: string) => void
+}) {
+  function apply(type: string) {
+    const el = textareaRef.current
+    if (!el) return
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    const sel = value.slice(start, end)
+    let insert = ''
+
+    switch (type) {
+      case 'bold':
+        insert = `**${sel || 'bold text'}**`
+        break
+      case 'heading':
+        insert = (start > 0 && value[start - 1] !== '\n' ? '\n' : '') + `**${sel || 'Heading'}:**` + '\n'
+        break
+      case 'bullet': {
+        const lines = sel ? sel.split('\n') : ['']
+        insert = lines.map(l => `- ${l}`).join('\n')
+        break
+      }
+      case 'numbered': {
+        const lines = sel ? sel.split('\n') : ['']
+        insert = lines.map((l, i) => `${i + 1}. ${l}`).join('\n')
+        break
+      }
+      case 'divider':
+        insert = '\n---\n'
+        break
+    }
+
+    const newVal = value.slice(0, start) + insert + value.slice(end)
+    onChange(newVal)
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = start + insert.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-0.5 px-1.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+      <FmtBtn onClick={() => apply('bold')} title="Bold (wrap selection)"><Bold size={13} /></FmtBtn>
+      <FmtBtn onClick={() => apply('heading')} title="Bold heading"><Heading2 size={13} /></FmtBtn>
+      <span className="w-px h-4 bg-gray-200 mx-1" />
+      <FmtBtn onClick={() => apply('bullet')} title="Bullet list"><List size={13} /></FmtBtn>
+      <FmtBtn onClick={() => apply('numbered')} title="Numbered list"><ListOrdered size={13} /></FmtBtn>
+      <span className="w-px h-4 bg-gray-200 mx-1" />
+      <FmtBtn onClick={() => apply('divider')} title="Horizontal rule"><Minus size={13} /></FmtBtn>
+      <span className="ml-auto text-[10px] text-gray-400 pr-1 hidden sm:block">Select text then click a button</span>
+    </div>
+  )
+}
+
+function FmtBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="p-1.5 rounded hover:bg-white hover:shadow-sm text-gray-500 hover:text-gray-900 transition-colors"
+    >
+      {children}
+    </button>
+  )
+}
+
+function MarkdownView({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h1 className="text-lg font-bold mb-3 mt-5 first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-4 first:mt-0">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h3>,
+        strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+        ul: ({ children }) => <ul className="list-disc list-outside ml-5 my-2 space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-outside ml-5 my-2 space-y-1">{children}</ol>,
+        li: ({ children }) => <li className="text-gray-700 leading-snug">{children}</li>,
+        p: ({ children }) => <p className="mb-2 leading-relaxed text-gray-700">{children}</p>,
+        hr: () => <hr className="my-4 border-gray-200" />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   )
 }
