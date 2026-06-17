@@ -63,8 +63,8 @@ function CategoriesSection() {
       for (const r of recipes) {
         if (r.category?.trim()) found.add(r.category.trim())
       }
-      const existing = await pb.collection('categories').getFullList({ fields: 'name' })
-      const existingLower = new Set(existing.map((c: Category) => c.name.toLowerCase()))
+      const existing = await pb.collection('categories').getFullList<Category>({ fields: 'name' })
+      const existingLower = new Set(existing.map(c => c.name.toLowerCase()))
       const toCreate = [...found].filter(c => !existingLower.has(c.toLowerCase()))
       let created = 0
       for (const name of toCreate) {
@@ -185,8 +185,8 @@ function TagsSection() {
       setSyncProgress(`${found.size} unique tags found — checking collection…`)
 
       // Get tags already in the collection
-      const existing = await pb.collection('tags').getFullList({ fields: 'name' })
-      const existingLower = new Set(existing.map((t: Tag) => t.name.toLowerCase()))
+      const existing = await pb.collection('tags').getFullList<Tag>({ fields: 'name' })
+      const existingLower = new Set(existing.map(t => t.name.toLowerCase()))
 
       const toCreate = [...found].filter(t => !existingLower.has(t.toLowerCase()))
       setSyncProgress(`Adding ${toCreate.length} new tags…`)
