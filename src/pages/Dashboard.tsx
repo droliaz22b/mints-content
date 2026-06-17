@@ -64,6 +64,8 @@ export default function Dashboard() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null)
+  const [tagSearch, setTagSearch] = useState('')
+  const [filterHasText, setFilterHasText] = useState(false)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -95,6 +97,7 @@ export default function Dashboard() {
       if (filterPlatform) filters.push(`platforms ~ "${filterPlatform}"`)
       if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `category = "${c}"`).join(' || ')})`)
       if (filterTags.length > 0) filters.push(`(${filterTags.map(t => `tags ~ "${t}"`).join(' || ')})`)
+      if (filterHasText) filters.push(`recipe_copy != ""`)
 
       const result = await pb.collection('recipes').getList<Recipe>(page, PER_PAGE, {
         filter: filters.join(' && '),
@@ -108,7 +111,7 @@ export default function Dashboard() {
       if (page === 1) setLoading(false)
       else setLoadingMore(false)
     }
-  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategories, filterTags, sortBy])
+  }, [page, debouncedSearch, filterStatus, filterPlatform, filterCategories, filterTags, sortBy, filterHasText])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -302,6 +305,13 @@ export default function Dashboard() {
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
+            <button
+              onClick={() => { setFilterHasText(v => !v); setPage(1) }}
+              className={`flex items-center gap-1.5 text-sm border rounded-lg px-3 py-2 transition-colors shadow-sm ${filterHasText ? 'bg-green-600 text-white border-green-600' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+              title="Show only recipes with recipe text"
+            >
+              <FileText size={13} /> Has text
+            </button>
           </div>
         </div>
 
@@ -331,6 +341,12 @@ export default function Dashboard() {
             >
               {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            <button
+              onClick={() => { setFilterHasText(v => !v); setPage(1) }}
+              className={`col-span-2 flex items-center justify-center gap-2 text-sm border rounded-lg px-3 py-2 transition-colors ${filterHasText ? 'bg-green-600 text-white border-green-600' : 'bg-white border-gray-200 text-gray-600'}`}
+            >
+              <FileText size={13} /> {filterHasText ? 'Showing: has recipe text ✓' : 'Show only recipes with text'}
+            </button>
           </div>
         )}
       </div>
@@ -339,18 +355,45 @@ export default function Dashboard() {
       {(allTags.length > 0 || allCategories.length > 0) && (
         <div className="space-y-1.5 mb-4">
           {allTags.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 sm:-mx-6 sm:px-6">
-              <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Top Tags</span>
-              <div className="flex gap-1.5 py-0.5">
-                {allTags.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => { setFilterTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1) }}
-                    className={`flex-shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium transition-colors whitespace-nowrap ${filterTags.includes(t) ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'}`}
-                  >
-                    {t}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 -mx-3 px-3 sm:-mx-6 sm:px-6">
+                <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Tags</span>
+                <div className="relative flex-shrink-0">
+                  <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input
+                    value={tagSearch}
+                    onChange={e => setTagSearch(e.target.value)}
+                    placeholder="filter…"
+                    className="pl-5 pr-2 py-0.5 text-xs border border-gray-200 rounded-md bg-white outline-none focus:ring-1 focus:ring-black w-24 sm:w-32"
+                  />
+                  {tagSearch && (
+                    <button onClick={() => setTagSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+                {filterTags.length > 0 && (
+                  <button onClick={() => { setFilterTags([]); setPage(1) }} className="text-[10px] text-gray-400 hover:text-gray-700 flex-shrink-0">
+                    clear ({filterTags.length})
                   </button>
-                ))}
+                )}
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-3 px-3 sm:-mx-6 sm:px-6 pb-0.5">
+                {allTags
+                  .filter(t => !tagSearch || t.toLowerCase().includes(tagSearch.toLowerCase()))
+                  .map(t => (
+                    <button
+                      key={t}
+                      onClick={() => { setFilterTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1) }}
+                      className={`flex-shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium transition-colors whitespace-nowrap ${filterTags.includes(t) ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'}`}
+                    >
+                      {t}
+                    </button>
+                  ))
+                }
+                {tagSearch && allTags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                  <span className="text-xs text-gray-400 py-0.5">No tags match "{tagSearch}"</span>
+                )}
               </div>
             </div>
           )}
