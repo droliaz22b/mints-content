@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
 import {
   Upload, FileText, CheckCircle, XCircle, Loader2,
-  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, Eye, EyeOff,
+  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, Eye, EyeOff, FolderOpen,
 } from 'lucide-react'
 
 interface Candidate { id: string; sl_no: number; recipe_name: string }
@@ -67,35 +67,42 @@ async function findCandidates(filename: string): Promise<Candidate[]> {
   return hits
 }
 
-async function formatWithAI(rawText: string, recipeName: string, apiKey: string): Promise<string> {
+async function formatWithAI(
+  rawText: string, recipeName: string, apiKey: string
+): Promise<{ recipe: string; tags: string[] }> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: `You are a recipe editor. Format and fix the grammar of recipe text.
+          content: `You are a recipe editor. Given raw recipe text, do two things and return JSON.
 
-Output using this exact structure:
-
+1. FORMAT the recipe into clean markdown:
 **Ingredients:**
-- ingredient with quantity
 - ingredient with quantity
 
 **Method:**
-1. Clear step
-2. Clear step
+1. Step one
+2. Step two
 
-Rules:
+2. EXTRACT 3-6 key ingredient tags — main ingredients only (e.g. paneer, chicken, rice, maida, coconut). Skip spices (cumin, turmeric, salt, pepper, chilli, garam masala, etc.) and oils/water/sugar.
+
+Return ONLY this JSON (no other text):
+{
+  "recipe": "<formatted markdown here>",
+  "tags": ["ingredient1", "ingredient2", "ingredient3"]
+}
+
+Rules for formatting:
 - Use **Ingredients:** and **Method:** as bold headings with a colon
-- List every ingredient as a bullet point starting with -
-- Number every method step (1. 2. 3.)
-- Fix all grammar and spelling errors
-- Keep all original content — do not add or remove ingredients or steps
-- Clean up spacing and punctuation
-- Use only markdown formatting (**, -, 1.) — no HTML`,
+- Every ingredient as a bullet (-)
+- Every method step numbered (1. 2. 3.)
+- Fix grammar and spelling
+- Keep all original content — do not add or remove steps`,
         },
         { role: 'user', content: `Recipe name: "${recipeName}"\n\n${rawText}` },
       ],
@@ -106,7 +113,13 @@ Rules:
     throw new Error(`OpenAI ${res.status}: ${body.slice(0, 120)}`)
   }
   const data = await res.json()
-  return data.choices[0].message.content.trim()
+  const parsed = JSON.parse(data.choices[0].message.content.trim())
+  return {
+    recipe: (parsed.recipe || '').trim(),
+    tags: Array.isArray(parsed.tags)
+      ? parsed.tags.map((t: unknown) => String(t).toLowerCase().trim()).filter(Boolean)
+      : [],
+  }
 }
 
 // ─── main component ──────────────────────────────────────────────────────────
@@ -119,7 +132,29 @@ export default function RecipeImport() {
   const [processing, setProcessing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [folderLoading, setFolderLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  async function selectFolder() {
+    const picker = (window as Window & { showDirectoryPicker?: (opts?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker
+    if (!picker) { alert('Folder selection requires Chrome or Edge browser.'); return }
+    setFolderLoading(true)
+    try {
+      const dir = await picker({ mode: 'read' })
+      const files: File[] = []
+      for await (const entry of (dir as unknown as AsyncIterable<FileSystemHandle>)) {
+        if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.docx')) {
+          files.push(await (entry as FileSystemFileHandle).getFile())
+        }
+      }
+      if (!files.length) { alert('No .docx files found in the selected folder.'); return }
+      addFiles(files)
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') alert('Could not read folder.')
+    } finally {
+      setFolderLoading(false)
+    }
+  }
 
   function patch(uid: string, delta: Partial<FileEntry>) {
     setEntries(prev => prev.map(e => e.uid === uid ? { ...e, ...delta } : e))
@@ -186,6 +221,10 @@ export default function RecipeImport() {
     if (!queue.length) return
     setUploading(true)
 
+    // Load existing tags once so we can detect new ones
+    const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
+    const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
+
     for (const entry of queue) {
       if (!entry.selectedId || !entry.rawText || !entry.candidates) continue
       const match = entry.candidates.find(c => c.id === entry.selectedId)
@@ -193,8 +232,24 @@ export default function RecipeImport() {
 
       patch(entry.uid, { phase: 'uploading' })
       try {
-        const formatted = await formatWithAI(entry.rawText, match.recipe_name, apiKey)
-        await pb.collection('recipes').update(match.id, { recipe_copy: formatted })
+        const { recipe: formatted, tags: aiTags } = await formatWithAI(entry.rawText, match.recipe_name, apiKey)
+
+        // Fetch current recipe tags to merge
+        const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags' })
+        const existing = Array.isArray(current.tags) ? current.tags as string[] : []
+        const existingLower = new Set(existing.map((t: string) => t.toLowerCase()))
+        const newTags = aiTags.filter(t => !existingLower.has(t))
+        const mergedTags = [...existing, ...newTags]
+
+        // Create any genuinely new tags in the tags collection
+        for (const tag of newTags) {
+          if (!knownTags.has(tag.toLowerCase())) {
+            await pb.collection('tags').create({ name: tag }).catch(() => { /* duplicate */ })
+            knownTags.add(tag.toLowerCase())
+          }
+        }
+
+        await pb.collection('recipes').update(match.id, { recipe_copy: formatted, tags: mergedTags })
         patch(entry.uid, { phase: 'done', formattedText: formatted })
       } catch (err) {
         patch(entry.uid, { phase: 'error', errorMsg: err instanceof Error ? err.message : 'Upload failed' })
@@ -249,14 +304,31 @@ export default function RecipeImport() {
         onDrop={onDrop}
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
-        onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors mb-4 ${
-          dragging ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50'
+        className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors mb-4 ${
+          dragging ? 'border-black bg-gray-50' : 'border-gray-200'
         }`}
       >
         <Upload size={22} className={`mx-auto mb-2 ${dragging ? 'text-black' : 'text-gray-400'}`} />
-        <p className="text-sm font-medium text-gray-700">Drop .docx files here</p>
-        <p className="text-xs text-gray-400 mt-1">or click to browse — multiple files supported</p>
+        <p className="text-sm font-medium text-gray-700 mb-3">Drop .docx files here</p>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
+          >
+            <FileText size={14} /> Browse files
+          </button>
+          <button
+            type="button"
+            onClick={selectFolder}
+            disabled={folderLoading}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {folderLoading ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+            {folderLoading ? 'Reading folder…' : 'Select Folder'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Select a whole folder to load all .docx files at once</p>
         <input
           ref={inputRef}
           type="file"
