@@ -10,7 +10,7 @@ import PlatformPill from '../components/PlatformPill'
 import BulkAddModal from '../components/BulkAddModal'
 import {
   Search, Plus, Upload, Download, LayoutGrid, Table2, Columns3,
-  Pencil, Trash2, AlertCircle, SlidersHorizontal, X, ArrowUpToLine, ArrowUpDown,
+  Pencil, Trash2, AlertCircle, SlidersHorizontal, X, ArrowUpToLine, ArrowUpDown, FileText,
 } from 'lucide-react'
 
 const SORT_OPTIONS = [
@@ -563,9 +563,15 @@ function RecipeCard({ recipe: r, selected, onSelect, onPreview, onEdit, onDelete
           {r.platforms.map(p => <PlatformPill key={p} platform={p} />)}
         </div>
       )}
-      <div className="flex justify-end gap-1 mt-auto pt-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-        <button onClick={e => { e.stopPropagation(); onEdit() }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"><Pencil size={13} /></button>
-        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+      <div className="flex items-center justify-between mt-auto pt-1">
+        {r.recipe_copy
+          ? <span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><FileText size={9} /> Recipe text ✓</span>
+          : <span className="text-[10px] text-gray-300">No recipe text</span>
+        }
+        <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          <button onClick={e => { e.stopPropagation(); onEdit() }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"><Pencil size={13} /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+        </div>
       </div>
     </div>
   )
