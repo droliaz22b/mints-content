@@ -42,8 +42,59 @@ export default function RecipeEditor() {
   const [error, setError] = useState('')
   const [recipeTab, setRecipeTab] = useState<'write' | 'preview'>('write')
   const [aiFormatting, setAiFormatting] = useState(false)
+  const [ingredientSuggestions, setIngredientSuggestions] = useState<string[]>([])
+  const [extractingIngredients, setExtractingIngredients] = useState(false)
   const tagRef = useRef<HTMLDivElement>(null)
   const copyRef = useRef<HTMLTextAreaElement>(null)
+
+  async function extractIngredientTags() {
+    const apiKey = localStorage.getItem('mints_openai_key')
+    if (!apiKey) {
+      alert('No OpenAI API key saved. Open Import Docs and enter your key first.')
+      return
+    }
+    if (!form.recipe_copy.trim()) return
+    setExtractingIngredients(true)
+    setIngredientSuggestions([])
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a recipe ingredient analyzer. Identify the 3-6 most important MAIN ingredients from the recipe text.
+
+Include: key proteins, vegetables, grains, dairy, nuts (e.g. paneer, rice, chicken, potato, coconut, bread, egg, onion, maida, atta, wheat, garlic, mushroom, lentil, banana, mango)
+Exclude: ALL spices and seasonings (salt, turmeric, cumin, coriander, chili, pepper, cardamom, garam masala, oregano, etc.), oil, water, sugar, baking soda/powder, vinegar
+
+Return ONLY a comma-separated list in lowercase. No explanation, no extra text.
+Example output: paneer, onion, capsicum, maida`,
+            },
+            {
+              role: 'user',
+              content: `Recipe: "${form.recipe_name}"\n\n${form.recipe_copy}`,
+            },
+          ],
+          max_tokens: 60,
+        }),
+      })
+      if (!res.ok) throw new Error(`OpenAI ${res.status}`)
+      const data = await res.json()
+      const raw = data.choices[0].message.content.trim()
+      const suggested = raw
+        .split(',')
+        .map((s: string) => s.trim().toLowerCase())
+        .filter((s: string) => s.length > 1 && !form.tags.map(t => t.toLowerCase()).includes(s))
+      setIngredientSuggestions(suggested)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Extraction failed.')
+    } finally {
+      setExtractingIngredients(false)
+    }
+  }
 
   async function formatWithAI() {
     const apiKey = localStorage.getItem('mints_openai_key')
@@ -243,7 +294,48 @@ export default function RecipeEditor() {
 
         {/* Tags */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
-          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
+            {form.recipe_copy.trim() && (
+              <button
+                type="button"
+                onClick={extractIngredientTags}
+                disabled={extractingIngredients}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40"
+              >
+                {extractingIngredients ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                {extractingIngredients ? 'Extracting…' : 'Suggest from recipe'}
+              </button>
+            )}
+          </div>
+
+          {/* AI ingredient suggestions */}
+          {ingredientSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 p-2.5 bg-amber-50 border border-amber-100 rounded-lg">
+              <span className="text-[10px] text-amber-700 font-semibold uppercase tracking-wide w-full mb-0.5">Suggested ingredients — click to add</span>
+              {ingredientSuggestions.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    addTag(s)
+                    setIngredientSuggestions(prev => prev.filter(x => x !== s))
+                  }}
+                  className="flex items-center gap-1 text-xs px-2.5 py-0.5 bg-white border border-amber-200 text-amber-800 rounded-full hover:bg-amber-100 hover:border-amber-300 transition-colors"
+                >
+                  + {s}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setIngredientSuggestions([])}
+                className="ml-auto text-[10px] text-amber-500 hover:text-amber-700"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-2" ref={tagRef}>
             <div className="relative flex-1">
               <input
