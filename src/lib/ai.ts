@@ -5,9 +5,14 @@ import { pb } from './pocketbase'
 // The OpenAI key is stored server-side and injected by the proxy, so it is never
 // sent to the browser. Admins set/rotate the key on the Settings page.
 
+// A message's content is either plain text, or (for vision) an array of parts.
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentPart[]
 }
 
 export interface ChatPayload {

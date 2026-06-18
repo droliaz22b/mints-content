@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import { preprocessToMarkdown } from '../lib/formatRecipe'
 import { generateCaption, type CaptionPlatform } from '../lib/caption'
+import { useAuth } from '../context/AuthContext'
+import ThumbnailStudioModal from '../components/ThumbnailStudioModal'
 import type { Recipe, RecipeStatus } from '../types'
 import StatusBadge from '../components/StatusBadge'
 import TagPill from '../components/TagPill'
@@ -732,6 +734,8 @@ function KanbanView({ recipes, onPreview, onEdit }: { recipes: Recipe[]; onPrevi
 
 // ---- Recipe Preview Modal ----
 function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; onClose: () => void; onEdit: () => void }) {
+  const { isAdmin } = useAuth()
+  const [showThumb, setShowThumb] = useState(false)
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
       <div
@@ -772,6 +776,14 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
         {/* Footer */}
         <div className="flex justify-end gap-3 px-5 sm:px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowThumb(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              <Sparkles size={13} /> Make Thumbnail
+            </button>
+          )}
           <button
             onClick={onEdit}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800"
@@ -780,6 +792,8 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
           </button>
         </div>
       </div>
+
+      {showThumb && <ThumbnailStudioModal recipe={r} onClose={() => setShowThumb(false)} />}
     </div>
   )
 }

@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brush fonts for the 9:16 thumbnail generator (admin feature) */
+@font-face {
+  font-family: 'MintsBrushBold';
+  src: url('/fonts/permanent-marker.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MintsBrushScript';
+  src: url('/fonts/yellowtail.woff2') format('woff2');
+  font-display: swap;
+}
+
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
