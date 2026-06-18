@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
@@ -11,6 +11,7 @@ import BulkAddModal from '../components/BulkAddModal'
 import {
   Search, Plus, Upload, Download, LayoutGrid, Table2, Columns3,
   Pencil, Trash2, AlertCircle, SlidersHorizontal, X, ArrowUpToLine, ArrowUpDown, FileText,
+  Copy, Check,
 } from 'lucide-react'
 
 const SORT_OPTIONS = [
@@ -761,25 +762,7 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
 
         {/* Recipe text */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
-          {r.recipe_copy ? (
-            <ReactMarkdown
-              components={{
-                h1: ({ children }) => <h1 className="text-lg font-bold mb-3 mt-5 first:mt-0 text-gray-900">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-sm font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h3>,
-                strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
-                ul: ({ children }) => <ul className="list-disc list-outside ml-5 my-3 space-y-1.5">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal list-outside ml-5 my-3 space-y-1.5">{children}</ol>,
-                li: ({ children }) => <li className="text-gray-700 text-sm leading-relaxed">{children}</li>,
-                p: ({ children }) => <p className="text-sm text-gray-700 mb-3 leading-relaxed">{children}</p>,
-                hr: () => <hr className="my-4 border-gray-200" />,
-              }}
-            >
-              {preprocessToMarkdown(r.recipe_copy)}
-            </ReactMarkdown>
-          ) : (
-            <p className="text-sm text-gray-400 italic">No recipe text added yet.</p>
-          )}
+          <RecipeBody markdown={r.recipe_copy ? preprocessToMarkdown(r.recipe_copy) : ''} />
         </div>
 
         {/* Footer */}
@@ -793,6 +776,60 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---- Recipe body: rendered markdown with a single "Copy recipe" button ----
+const MD_COMPONENTS = {
+  h1: ({ children }: { children?: ReactNode }) => <h1 className="text-lg font-bold mb-3 mt-5 first:mt-0 text-gray-900">{children}</h1>,
+  h2: ({ children }: { children?: ReactNode }) => <h2 className="text-base font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h2>,
+  h3: ({ children }: { children?: ReactNode }) => <h3 className="text-sm font-bold mb-2 mt-4 first:mt-0 text-gray-900">{children}</h3>,
+  strong: ({ children }: { children?: ReactNode }) => <strong className="font-bold text-gray-900">{children}</strong>,
+  ul: ({ children }: { children?: ReactNode }) => <ul className="list-disc list-outside ml-5 my-3 space-y-1.5">{children}</ul>,
+  ol: ({ children }: { children?: ReactNode }) => <ol className="list-decimal list-outside ml-5 my-3 space-y-1.5">{children}</ol>,
+  li: ({ children }: { children?: ReactNode }) => <li className="text-gray-700 text-sm leading-relaxed">{children}</li>,
+  p: ({ children }: { children?: ReactNode }) => <p className="text-sm text-gray-700 mb-3 leading-relaxed">{children}</p>,
+  hr: () => <hr className="my-4 border-gray-200" />,
+}
+
+// Markdown → clean plain text for clipboard (bullets to •, strip bold, keep numbering).
+function toPlainText(md: string): string {
+  return md.split('\n')
+    .map(l => l.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^\s*[-*+]\s+/, '• ').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(text)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+      .catch(() => {})
+  }
+  return (
+    <button
+      onClick={copy}
+      className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800 flex-shrink-0"
+    >
+      {copied
+        ? <><Check size={12} className="text-green-600" /> Copied</>
+        : <><Copy size={12} /> {label}</>}
+    </button>
+  )
+}
+
+function RecipeBody({ markdown }: { markdown: string }) {
+  if (!markdown) return <p className="text-sm text-gray-400 italic">No recipe text added yet.</p>
+
+  return (
+    <div>
+      <div className="flex justify-end mb-2">
+        <CopyButton text={toPlainText(markdown)} label="Copy recipe" />
+      </div>
+      <ReactMarkdown components={MD_COMPONENTS}>{markdown}</ReactMarkdown>
     </div>
   )
 }
