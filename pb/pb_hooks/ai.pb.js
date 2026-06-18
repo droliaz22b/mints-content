@@ -8,31 +8,20 @@
 // sent to the browser. All authenticated users can call /api/ai/chat; only
 // admins can view status or set the key.
 //
-// Deploy: place this file in the PocketBase hooks dir (/app/pb_hooks/ai.pb.js)
-// and it auto-reloads. Targets PocketBase v0.23+.
+// NOTE: PocketBase JSVM runs each route handler in an isolated sandbox that
+// CANNOT access top-level helper functions in this file. All logic must be
+// inlined inside each handler. Deploy at /app/pb_hooks/ai.pb.js (v0.23+).
 // ─────────────────────────────────────────────────────────────────────────────
-
-function loadOpenAiKey() {
-  try {
-    const rec = $app.findFirstRecordByFilter("app_secrets", "id != ''")
-    return rec ? rec.get("openai_key") : ""
-  } catch (_) {
-    return ""
-  }
-}
-
-function isAdmin(e) {
-  try {
-    return !!e.auth && e.auth.get("role") === "admin"
-  } catch (_) {
-    return false
-  }
-}
 
 // POST /api/ai/chat — proxy to OpenAI chat completions (any logged-in user).
 routerAdd("POST", "/api/ai/chat", (e) => {
   try {
-    const key = loadOpenAiKey()
+    let key = ""
+    try {
+      const rec = $app.findFirstRecordByFilter("app_secrets", "id != ''")
+      key = rec ? rec.get("openai_key") : ""
+    } catch (_) {}
+
     if (!key) {
       return e.json(400, { message: "OpenAI key not configured. Ask an admin to set it in Settings." })
     }
@@ -63,7 +52,6 @@ routerAdd("POST", "/api/ai/chat", (e) => {
 
     return e.json(res.statusCode, parsed)
   } catch (err) {
-    try { $app.logger().error("ai/chat failed: " + String(err)) } catch (_) {}
     return e.json(500, { message: "AI proxy error: " + String(err) })
   }
 }, $apis.requireAuth())
@@ -71,8 +59,17 @@ routerAdd("POST", "/api/ai/chat", (e) => {
 // GET /api/ai/config — is a key configured? (admin only)
 routerAdd("GET", "/api/ai/config", (e) => {
   try {
-    if (!isAdmin(e)) return e.json(403, { message: "Admin only." })
-    return e.json(200, { configured: !!loadOpenAiKey() })
+    let admin = false
+    try { admin = !!e.auth && e.auth.get("role") === "admin" } catch (_) {}
+    if (!admin) return e.json(403, { message: "Admin only." })
+
+    let key = ""
+    try {
+      const rec = $app.findFirstRecordByFilter("app_secrets", "id != ''")
+      key = rec ? rec.get("openai_key") : ""
+    } catch (_) {}
+
+    return e.json(200, { configured: !!key })
   } catch (err) {
     return e.json(500, { message: "config error: " + String(err) })
   }
@@ -81,7 +78,9 @@ routerAdd("GET", "/api/ai/config", (e) => {
 // POST /api/ai/config — set / rotate the key (admin only).
 routerAdd("POST", "/api/ai/config", (e) => {
   try {
-    if (!isAdmin(e)) return e.json(403, { message: "Admin only." })
+    let admin = false
+    try { admin = !!e.auth && e.auth.get("role") === "admin" } catch (_) {}
+    if (!admin) return e.json(403, { message: "Admin only." })
 
     const data = new DynamicModel({ openai_key: "" })
     e.bindBody(data)
