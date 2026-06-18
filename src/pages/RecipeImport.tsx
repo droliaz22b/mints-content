@@ -75,7 +75,14 @@ export default function RecipeImport() {
   const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; duplicates: number; errors: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [folderLoading, setFolderLoading] = useState(false)
+  const [cancelled, setCancelled] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const cancelRef = useRef(false)
+
+  function requestCancel() {
+    cancelRef.current = true
+    setCancelled(true)
+  }
 
   async function selectFolder() {
     const picker = (window as Window & { showDirectoryPicker?: (opts?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker
@@ -142,6 +149,8 @@ export default function RecipeImport() {
   async function autoImportAll() {
     const queue = entries.filter(e => e.phase === 'idle')
     if (!queue.length) return
+    cancelRef.current = false
+    setCancelled(false)
     setAutoImporting(true)
     setAutoSummary(null)
 
@@ -151,6 +160,7 @@ export default function RecipeImport() {
     let imported = 0, review = 0, duplicates = 0, errors = 0
 
     for (const entry of queue) {
+      if (cancelRef.current) break
       patch(entry.uid, { phase: 'extracting' })
       let rawText: string
       try {
@@ -225,9 +235,12 @@ export default function RecipeImport() {
   const processAll = useCallback(async () => {
     const queue = entries.filter(e => e.phase === 'idle')
     if (!queue.length) return
+    cancelRef.current = false
+    setCancelled(false)
     setProcessing(true)
 
     for (const entry of queue) {
+      if (cancelRef.current) break
       patch(entry.uid, { phase: 'extracting' })
       let rawText: string
       try {
@@ -262,12 +275,15 @@ export default function RecipeImport() {
   async function uploadSelected() {
     const queue = entries.filter(e => e.phase === 'ready' && e.selectedId)
     if (!queue.length) return
+    cancelRef.current = false
+    setCancelled(false)
     setUploading(true)
 
     const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
     const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
 
     for (const entry of queue) {
+      if (cancelRef.current) break
       if (!entry.selectedId || !entry.rawText || !entry.candidates) continue
       const match = entry.candidates.find(c => c.id === entry.selectedId)
       if (!match) continue
@@ -297,14 +313,24 @@ export default function RecipeImport() {
   return (
     <div className="w-full max-w-3xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight">Import from Docs</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Upload .docx files → auto-import clear matches → review the rest</p>
+          <p className="text-sm text-gray-500 mt-0.5">Add Word recipe files and attach them to your recipes automatically.</p>
         </div>
-        <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800">
+        <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800" title="Back to Dashboard">
           <ArrowLeft size={16} />
         </button>
+      </div>
+
+      {/* How it works */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2.5">How it works</p>
+        <ol className="space-y-1.5 text-sm text-gray-600">
+          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">1</span> Add your <strong>.docx</strong> recipe files (or a whole folder).</li>
+          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">2</span> Click <strong>Start Import</strong> — files that clearly match one recipe are imported automatically.</li>
+          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">3</span> Anything unclear is flagged <strong>Needs review</strong> below — pick the right recipe, then <strong>Import selected</strong>.</li>
+        </ol>
       </div>
 
       {/* Drop zone */}
@@ -363,6 +389,11 @@ export default function RecipeImport() {
       {/* Auto-import result banner */}
       {autoSummary && !autoImporting && (
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 mb-4 space-y-1">
+          {cancelled && (
+            <p className="text-sm text-gray-700 flex items-center gap-2">
+              <X size={14} /> Import cancelled. Remaining files are still queued below — click Start Import to continue.
+            </p>
+          )}
           {autoSummary.imported > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-2">
               <CheckCircle size={14} />
@@ -423,39 +454,81 @@ export default function RecipeImport() {
         </div>
       )}
 
-      {/* Action buttons */}
+      {/* Action bar */}
       {entries.length > 0 && (
-        <div className="flex flex-wrap gap-3 justify-end">
-          {idleCount > 0 && (
-            <button
-              onClick={processAll}
-              disabled={busy}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              {processing ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-              {processing ? 'Matching…' : `Match only (${idleCount})`}
-            </button>
-          )}
-          {idleCount > 0 && (
-            <button
-              onClick={autoImportAll}
-              disabled={busy}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-              title="Auto-import clear matches, flag ambiguous for review"
-            >
-              {autoImporting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-              {autoImporting ? 'Auto-importing…' : `Auto-Import All (${idleCount})`}
-            </button>
-          )}
-          {readyCount > 0 && (
-            <button
-              onClick={uploadSelected}
-              disabled={busy}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-            >
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploading ? 'Uploading…' : `Upload selected (${readyCount})`}
-            </button>
+        <div className="sticky bottom-3 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          {busy ? (
+            /* While running — show status + Cancel */
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-gray-700 flex items-center gap-2 min-w-0">
+                <Loader2 size={15} className="animate-spin flex-shrink-0" />
+                <span className="truncate">
+                  {cancelled
+                    ? 'Stopping after the current file…'
+                    : autoImporting ? `Importing… (${doneCount + reviewCount + errorCount}/${entries.length})`
+                    : processing ? 'Matching files…'
+                    : 'Importing selected…'}
+                </span>
+              </span>
+              <button
+                onClick={requestCancel}
+                disabled={cancelled}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 flex-shrink-0"
+              >
+                <X size={14} /> {cancelled ? 'Stopping…' : 'Cancel'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Step 2 — start the import */}
+              {idleCount > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <button
+                    onClick={autoImportAll}
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 font-medium"
+                  >
+                    <Zap size={15} /> Start Import ({idleCount} file{idleCount !== 1 ? 's' : ''})
+                  </button>
+                  <button onClick={processAll} className="text-sm text-gray-500 hover:text-black underline text-left" title="Match files to recipes without importing anything yet">
+                    Preview matches first
+                  </button>
+                  <button onClick={() => { setEntries([]); setAutoSummary(null) }} className="sm:ml-auto text-sm text-gray-400 hover:text-red-500 flex items-center gap-1">
+                    <X size={13} /> Remove all
+                  </button>
+                </div>
+              )}
+
+              {/* Step 3 — review + import the flagged ones */}
+              {reviewCount > 0 && (
+                <div className={`flex flex-col sm:flex-row sm:items-center gap-3 ${idleCount > 0 ? 'border-t border-gray-100 pt-3' : ''}`}>
+                  <span className="text-sm text-gray-600">
+                    {readyCount > 0
+                      ? `${readyCount} of ${reviewCount} flagged file${reviewCount !== 1 ? 's' : ''} ready to import.`
+                      : `${reviewCount} file${reviewCount !== 1 ? 's' : ''} need review above — pick a recipe or skip.`}
+                  </span>
+                  {readyCount > 0 && (
+                    <button
+                      onClick={uploadSelected}
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 font-medium sm:ml-auto"
+                    >
+                      <Upload size={15} /> Import {readyCount} selected
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Nothing left to do */}
+              {idleCount === 0 && reviewCount === 0 && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-600 flex items-center gap-1.5">
+                    <CheckCircle size={15} className="text-green-500" /> All files processed.
+                  </span>
+                  <button onClick={() => { setEntries([]); setAutoSummary(null) }} className="text-sm text-gray-500 hover:text-black flex items-center gap-1">
+                    <X size={13} /> Clear list
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
