@@ -498,11 +498,18 @@ function EntryCard({
   const matchedName = entry.candidates?.find(c => c.id === entry.selectedId)
   const noMatch = entry.phase === 'ready' && (!entry.candidates || entry.candidates.length === 0)
   const ambiguous = entry.phase === 'ready' && entry.candidates && entry.candidates.length > 1
+  const dup = entry.phase === 'ready' && !!entry.candidates && entry.candidates.length === 1 && !!entry.candidates[0].has_text
+  const reviewReason =
+    noMatch   ? 'No matching recipe found — search for one or skip'
+    : ambiguous ? `${entry.candidates!.length} possible matches — pick the right one`
+    : dup       ? 'Matched recipe already has text — importing will overwrite it'
+    : 'Confirm the matched recipe below'
 
   return (
     <div className={`bg-white rounded-xl border overflow-hidden ${
       entry.phase === 'done'  ? 'border-green-200' :
       entry.phase === 'error' ? 'border-red-200' :
+      dup                     ? 'border-orange-300' :
       (noMatch || ambiguous)  ? 'border-amber-300' : 'border-gray-200'
     }`}>
       {/* Header */}
@@ -530,25 +537,29 @@ function EntryCard({
         )}
       </div>
 
+      {/* Why it needs review — always visible for ready items */}
+      {entry.phase === 'ready' && (
+        <div className={`border-t px-4 py-2 flex items-center gap-1.5 text-xs ${
+          dup ? 'border-orange-100 bg-orange-50 text-orange-800' : 'border-amber-100 text-amber-700'
+        }`}>
+          <AlertCircle size={12} className="flex-shrink-0" />
+          <span className="font-medium">Needs review:</span> {reviewReason}
+        </div>
+      )}
+
       {/* Collapsed ready state — show brief match info */}
       {!entry.expanded && entry.phase === 'ready' && (
-        <div onClick={onToggle} className="border-t border-amber-100 px-4 py-2 flex items-center gap-2 cursor-pointer hover:bg-amber-50">
-          {noMatch ? (
-            <span className="text-xs text-amber-700 flex items-center gap-1.5">
-              <AlertCircle size={12} /> No match found — click to skip or review
-            </span>
-          ) : ambiguous ? (
-            <span className="text-xs text-amber-700 flex items-center gap-1.5">
-              <AlertCircle size={12} /> {entry.candidates!.length} possible matches — click to choose
-            </span>
-          ) : matchedName ? (
+        <div onClick={onToggle} className="border-t border-gray-100 px-4 py-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50">
+          {matchedName ? (
             <>
               <span className="text-xs text-gray-400">→</span>
               <span className="text-xs text-gray-500 font-mono">#{matchedName.sl_no}</span>
               <span className="text-xs text-gray-700 truncate flex-1">{matchedName.recipe_name}</span>
+              {matchedName.has_text && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 flex-shrink-0">has text</span>}
+              <span className="text-xs text-gray-400 flex-shrink-0">click to review</span>
             </>
           ) : (
-            <span className="text-xs text-red-500">No recipe selected — click to review</span>
+            <span className="text-xs text-gray-500 flex items-center gap-1.5">Click to choose a recipe or skip</span>
           )}
         </div>
       )}
@@ -590,7 +601,8 @@ function EntryCard({
                       <input type="radio" name={`m-${entry.uid}`} checked={active} onChange={() => onSelect(c.id)} className="sr-only" />
                       <span className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 transition-colors ${active ? 'border-black bg-black' : 'border-gray-300'}`} />
                       <span className="text-xs text-gray-400 font-mono w-10 flex-shrink-0">#{c.sl_no}</span>
-                      <span className="text-sm text-gray-800">{c.recipe_name}</span>
+                      <span className="text-sm text-gray-800 flex-1">{c.recipe_name}</span>
+                      {c.has_text && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 flex-shrink-0">has text</span>}
                     </label>
                   )
                 })}
