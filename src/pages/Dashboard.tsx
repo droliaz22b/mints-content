@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import { preprocessToMarkdown } from '../lib/formatRecipe'
+import { generateCaption, type CaptionPlatform } from '../lib/caption'
 import type { Recipe, RecipeStatus } from '../types'
 import StatusBadge from '../components/StatusBadge'
 import TagPill from '../components/TagPill'
@@ -11,7 +12,7 @@ import BulkAddModal from '../components/BulkAddModal'
 import {
   Search, Plus, Upload, Download, LayoutGrid, Table2, Columns3,
   Pencil, Trash2, AlertCircle, SlidersHorizontal, X, ArrowUpToLine, ArrowUpDown, FileText,
-  Copy, Check,
+  Copy, Check, Sparkles, Loader2,
 } from 'lucide-react'
 
 const SORT_OPTIONS = [
@@ -760,9 +761,12 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
           </div>
         )}
 
-        {/* Recipe text */}
-        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
+        {/* Recipe text + caption generator */}
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
           <RecipeBody markdown={r.recipe_copy ? preprocessToMarkdown(r.recipe_copy) : ''} />
+          <div className="border-t border-gray-100 pt-5">
+            <CaptionGenerator recipeName={r.recipe_name} platforms={r.platforms} />
+          </div>
         </div>
 
         {/* Footer */}
@@ -830,6 +834,89 @@ function RecipeBody({ markdown }: { markdown: string }) {
         <CopyButton text={toPlainText(markdown)} label="Copy recipe" />
       </div>
       <ReactMarkdown components={MD_COMPONENTS}>{markdown}</ReactMarkdown>
+    </div>
+  )
+}
+
+// ---- Social caption generator (uses the shared OpenAI proxy) ----
+const CAPTION_PLATFORMS: CaptionPlatform[] = ['Facebook', 'Instagram']
+
+function CaptionGenerator({ recipeName, platforms }: { recipeName: string; platforms?: string[] }) {
+  const preferred = CAPTION_PLATFORMS.find(p => platforms?.includes(p)) || 'Facebook'
+  const [platform, setPlatform] = useState<CaptionPlatform>(preferred)
+  const [caption, setCaption] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function generate() {
+    setLoading(true); setError('')
+    try {
+      setCaption(await generateCaption(recipeName, platform))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to generate caption.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5">
+          <Sparkles size={15} className="text-amber-500" /> Social Caption
+        </h3>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          {CAPTION_PLATFORMS.map(p => (
+            <button
+              key={p}
+              onClick={() => setPlatform(p)}
+              className={`text-xs px-3 py-1 rounded-md transition-colors ${
+                platform === p ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+
+      {caption ? (
+        <div>
+          <textarea
+            value={caption}
+            onChange={e => setCaption(e.target.value)}
+            rows={10}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-y"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <CopyButton text={caption} label="Copy caption" />
+            <button
+              onClick={generate}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {loading ? 'Generating…' : 'Regenerate'}
+            </button>
+            <span className="text-xs text-gray-400 ml-auto">Edit before posting if you like.</span>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+        >
+          {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+          {loading ? 'Generating caption…' : `Generate ${platform} caption`}
+        </button>
+      )}
     </div>
   )
 }
