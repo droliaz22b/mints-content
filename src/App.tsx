@@ -8,6 +8,7 @@ import Masters from './pages/Masters'
 import Team from './pages/Team'
 import SiteSettings from './pages/SiteSettings'
 import RecipeImport from './pages/RecipeImport'
+import ReviewQueue from './pages/ReviewQueue'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
@@ -34,6 +35,7 @@ function AppRoutes() {
         <Route path="/team" element={<ProtectedRoute adminOnly><Team /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute adminOnly><SiteSettings /></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute adminOnly><RecipeImport /></ProtectedRoute>} />
+        <Route path="/review" element={<ProtectedRoute adminOnly><ReviewQueue /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

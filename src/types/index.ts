@@ -49,3 +49,27 @@ export interface AppUser {
   name: string
   role: UserRole
 }
+
+export type ReviewReason = 'no_match' | 'multiple_matches' | 'error' | 'duplicate'
+export type ReviewStatus = 'pending' | 'resolved' | 'dismissed'
+
+export interface ReviewCandidate {
+  id: string
+  sl_no: number
+  recipe_name: string
+  has_text?: boolean
+}
+
+export interface ReviewItem {
+  id: string
+  file_name: string
+  raw_text: string
+  reason: ReviewReason
+  duplicate: boolean
+  candidates: ReviewCandidate[]
+  note: string
+  status: ReviewStatus
+  resolved_recipe: string
+  created: string
+  updated: string
+}

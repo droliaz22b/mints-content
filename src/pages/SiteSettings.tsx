@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import { pb } from '../lib/pocketbase'
 import { useSettings, type SiteSettings } from '../context/SettingsContext'
-import { Save, Loader2, AlertCircle, CheckCircle2, Upload, X } from 'lucide-react'
+import { getAiKeyStatus, setAiKey } from '../lib/ai'
+import { Save, Loader2, AlertCircle, CheckCircle2, Upload, X, KeyRound, Eye, EyeOff } from 'lucide-react'
 
 function fileUrl(record: { collectionId: string; id: string }, name: string) {
   return name ? `${pb.baseUrl}/api/files/${record.collectionId}/${record.id}/${name}` : ''
@@ -191,6 +192,109 @@ export default function SiteSettings() {
           )}
         </div>
       </form>
+
+      <AiKeySection />
     </div>
+  )
+}
+
+// ─── Shared OpenAI key (server-side; never sent to the browser) ───────────────
+function AiKeySection() {
+  const [configured, setConfigured] = useState<boolean | null>(null)
+  const [keyInput, setKeyInput] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getAiKeyStatus().then(setConfigured).catch(() => setConfigured(false))
+  }, [])
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    const key = keyInput.trim()
+    if (!key) return
+    setSaving(true); setError(''); setSaved(false)
+    try {
+      await setAiKey(key)
+      setKeyInput('')
+      setConfigured(true)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save key.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 mt-5">
+      <div>
+        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+          <KeyRound size={13} /> OpenAI API Key
+        </h2>
+        <p className="text-xs text-gray-400 mt-1">
+          Shared by everyone for AI formatting and tag suggestions. Stored securely on the server —
+          team members never need their own key.
+        </p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+
+      <div className="text-sm">
+        {configured === null ? (
+          <span className="text-gray-400 flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Checking…</span>
+        ) : configured ? (
+          <span className="flex items-center gap-1.5 text-green-700"><CheckCircle2 size={14} /> A key is configured.</span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-amber-700"><AlertCircle size={14} /> No key set — AI features are disabled until you add one.</span>
+        )}
+      </div>
+
+      <form onSubmit={save} className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          {configured ? 'Replace key' : 'Set key'}
+        </label>
+        <div className="relative">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={keyInput}
+            onChange={e => setKeyInput(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-9 text-sm font-mono outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            placeholder="sk-proj-…"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(v => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">For security, the existing key is never displayed. Saving overwrites it.</p>
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={saving || !keyInput.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? 'Saving…' : 'Save Key'}
+          </button>
+          {saved && (
+            <span className="flex items-center gap-1.5 text-sm text-green-700">
+              <CheckCircle2 size={15} /> Key saved
+            </span>
+          )}
+        </div>
+      </form>
+    </section>
   )
 }

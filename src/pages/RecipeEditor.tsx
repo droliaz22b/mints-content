@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
+import { aiChat } from '../lib/ai'
 import { preprocessToMarkdown, FORMAT_SYSTEM_PROMPT } from '../lib/formatRecipe'
 import type { Recipe, RecipeStatus } from '../types'
 import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus, Sparkles } from 'lucide-react'
@@ -48,41 +49,29 @@ export default function RecipeEditor() {
   const copyRef = useRef<HTMLTextAreaElement>(null)
 
   async function extractIngredientTags() {
-    const apiKey = localStorage.getItem('mints_openai_key')
-    if (!apiKey) {
-      alert('No OpenAI API key saved. Open Import Docs and enter your key first.')
-      return
-    }
     if (!form.recipe_copy.trim()) return
     setExtractingIngredients(true)
     setIngredientSuggestions([])
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a recipe ingredient analyzer. Identify the 3-6 most important MAIN ingredients from the recipe text.
+      const data = await aiChat({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a recipe ingredient analyzer. Identify the 3-6 most important MAIN ingredients from the recipe text.
 
 Include: key proteins, vegetables, grains, dairy, nuts (e.g. paneer, rice, chicken, potato, coconut, bread, egg, onion, maida, atta, wheat, garlic, mushroom, lentil, banana, mango)
 Exclude: ALL spices and seasonings (salt, turmeric, cumin, coriander, chili, pepper, cardamom, garam masala, oregano, etc.), oil, water, sugar, baking soda/powder, vinegar
 
 Return ONLY a comma-separated list in lowercase. No explanation, no extra text.
 Example output: paneer, onion, capsicum, maida`,
-            },
-            {
-              role: 'user',
-              content: `Recipe: "${form.recipe_name}"\n\n${form.recipe_copy}`,
-            },
-          ],
-          max_tokens: 60,
-        }),
+          },
+          {
+            role: 'user',
+            content: `Recipe: "${form.recipe_name}"\n\n${form.recipe_copy}`,
+          },
+        ],
+        max_tokens: 60,
       })
-      if (!res.ok) throw new Error(`OpenAI ${res.status}`)
-      const data = await res.json()
       const raw = data.choices[0].message.content.trim()
       const suggested = raw
         .split(',')
@@ -97,27 +86,15 @@ Example output: paneer, onion, capsicum, maida`,
   }
 
   async function formatWithAI() {
-    const apiKey = localStorage.getItem('mints_openai_key')
-    if (!apiKey) {
-      alert('No OpenAI API key saved. Open Import Docs and enter your key first.')
-      return
-    }
     if (!form.recipe_copy.trim()) return
     setAiFormatting(true)
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: FORMAT_SYSTEM_PROMPT },
-            { role: 'user', content: `Recipe name: "${form.recipe_name}"\n\n${form.recipe_copy}` },
-          ],
-        }),
+      const data = await aiChat({
+        messages: [
+          { role: 'system', content: FORMAT_SYSTEM_PROMPT },
+          { role: 'user', content: `Recipe name: "${form.recipe_name}"\n\n${form.recipe_copy}` },
+        ],
       })
-      if (!res.ok) throw new Error(`OpenAI ${res.status}`)
-      const data = await res.json()
       set('recipe_copy', data.choices[0].message.content.trim())
       setRecipeTab('preview')
     } catch (err) {
@@ -463,7 +440,7 @@ Example output: paneer, onion, capsicum, maida`,
                 onClick={formatWithAI}
                 disabled={aiFormatting || !form.recipe_copy.trim()}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 disabled:opacity-40"
-                title="Format with AI (requires OpenAI key from Import Docs)"
+                title="Format with AI"
               >
                 {aiFormatting ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
                 {aiFormatting ? 'Formatting…' : 'Format with AI'}

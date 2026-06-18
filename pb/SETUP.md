@@ -100,3 +100,55 @@ Set environment variable in your Coolify frontend deployment:
 ```
 VITE_POCKETBASE_URL=https://your-pb-domain.com
 ```
+
+---
+
+## 6. Shared OpenAI Key (server-side proxy)
+
+AI features (recipe formatting, tag suggestions) use ONE shared OpenAI key managed
+by admins on the **Settings** page. The key is stored server-side and never sent to
+the browser — team members never paste their own key.
+
+### a. Create the locked collection (one-time)
+```
+node scripts/setup-ai-secrets.mjs
+```
+This creates `app_secrets` (field `openai_key`) with **all API rules null**, so only
+superusers and server-side hooks can read it.
+
+### b. Deploy the proxy hook
+Copy `pb/pb_hooks/ai.pb.js` into the PocketBase container's hooks dir and restart.
+
+The muchobien PocketBase image reads hooks from `/pb/pb_hooks`. Container name is
+`pocketbase-<service-uuid>` (e.g. `pocketbase-pnnzwrbpikouced27hacq7mx`).
+
+Option A — pull from GitHub (after committing & pushing this file):
+```
+docker exec pocketbase-<uuid> sh -c \
+  'mkdir -p /pb/pb_hooks && wget -qO /pb/pb_hooks/ai.pb.js \
+   https://raw.githubusercontent.com/droliaz22b/mints-content/master/pb/pb_hooks/ai.pb.js'
+docker restart pocketbase-<uuid>
+```
+
+Option B — copy from your machine:
+```
+docker cp pb/pb_hooks/ai.pb.js pocketbase-<uuid>:/pb/pb_hooks/ai.pb.js
+docker restart pocketbase-<uuid>
+```
+
+> If `/pb/pb_hooks` is NOT a persisted Coolify volume, the file is lost on redeploy.
+> Mount a volume at `/pb/pb_hooks` in the PocketBase service to keep it permanent.
+
+### c. Verify
+```
+curl -s -o /dev/null -w "%{http_code}\n" https://pb.yourdomain.com/api/ai/config
+```
+Returns `401` once the hook is live (was `404` before). Then open **Settings** as an
+admin, paste the key, Save. AI buttons now work for every user.
+
+### Routes exposed by the hook
+| Route              | Access            | Purpose                          |
+|--------------------|-------------------|----------------------------------|
+| `POST /api/ai/chat`   | any logged-in user | proxies OpenAI chat completions |
+| `GET  /api/ai/config` | admin only        | is a key configured?             |
+| `POST /api/ai/config` | admin only        | set / rotate the key             |

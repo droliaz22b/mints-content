@@ -4,5 +4,6 @@ dist
 .env.local
 *.xlsx
 pb/pb_data
-pb/pb_hooks
+pb/pb_hooks/*
+!pb/pb_hooks/ai.pb.js
 scripts/

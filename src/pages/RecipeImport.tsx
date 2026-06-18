@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
+import { formatRecipeWithAI, recipeHasText, saveReviewItem } from '../lib/recipeImport'
 import {
   Upload, FileText, CheckCircle, XCircle, Loader2,
-  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, Eye, EyeOff, FolderOpen, Zap,
+  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, FolderOpen, Zap,
 } from 'lucide-react'
 
-interface Candidate { id: string; sl_no: number; recipe_name: string }
+interface Candidate { id: string; sl_no: number; recipe_name: string; has_text?: boolean }
 
 type Phase = 'idle' | 'extracting' | 'matching' | 'ready' | 'uploading' | 'done' | 'error'
 
@@ -63,72 +64,15 @@ async function findCandidates(filename: string): Promise<Candidate[]> {
   return hits
 }
 
-async function formatWithAI(
-  rawText: string, recipeName: string, apiKey: string
-): Promise<{ recipe: string; tags: string[] }> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are a recipe editor. Given raw recipe text, do two things and return JSON.
-
-1. FORMAT the recipe into clean markdown:
-**Ingredients:**
-- ingredient with quantity
-
-**Method:**
-1. Step one
-2. Step two
-
-2. EXTRACT 3-6 key ingredient tags — main ingredients only (e.g. paneer, chicken, rice, maida, coconut). Skip spices (cumin, turmeric, salt, pepper, chilli, garam masala, etc.) and oils/water/sugar.
-
-Return ONLY this JSON (no other text):
-{
-  "recipe": "<formatted markdown here>",
-  "tags": ["ingredient1", "ingredient2", "ingredient3"]
-}
-
-Rules for formatting:
-- Use **Ingredients:** and **Method:** as bold headings with a colon
-- Every ingredient as a bullet (-)
-- Every method step numbered (1. 2. 3.)
-- Fix grammar and spelling
-- Keep all original content — do not add or remove steps`,
-        },
-        { role: 'user', content: `Recipe name: "${recipeName}"\n\n${rawText}` },
-      ],
-    }),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`OpenAI ${res.status}: ${body.slice(0, 120)}`)
-  }
-  const data = await res.json()
-  const parsed = JSON.parse(data.choices[0].message.content.trim())
-  return {
-    recipe: (parsed.recipe || '').trim(),
-    tags: Array.isArray(parsed.tags)
-      ? parsed.tags.map((t: unknown) => String(t).toLowerCase().trim()).filter(Boolean)
-      : [],
-  }
-}
-
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function RecipeImport() {
   const navigate = useNavigate()
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('mints_openai_key') || '')
-  const [showKey, setShowKey] = useState(false)
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [processing, setProcessing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [autoImporting, setAutoImporting] = useState(false)
-  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; errors: number } | null>(null)
+  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; duplicates: number; errors: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [folderLoading, setFolderLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -196,7 +140,6 @@ export default function RecipeImport() {
 
   // ── Auto-Import All: uploads clear matches, flags ambiguous for review ────
   async function autoImportAll() {
-    if (!apiKey) { alert('Enter your OpenAI API key first.'); return }
     const queue = entries.filter(e => e.phase === 'idle')
     if (!queue.length) return
     setAutoImporting(true)
@@ -205,7 +148,7 @@ export default function RecipeImport() {
     const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
     const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
 
-    let imported = 0, review = 0, errors = 0
+    let imported = 0, review = 0, duplicates = 0, errors = 0
 
     for (const entry of queue) {
       patch(entry.uid, { phase: 'extracting' })
@@ -214,6 +157,7 @@ export default function RecipeImport() {
         rawText = await extractDocx(entry.file)
       } catch {
         patch(entry.uid, { phase: 'error', errorMsg: 'Could not read .docx file.' })
+        await saveReviewItem({ file_name: entry.file.name, raw_text: '', reason: 'error', duplicate: false, candidates: [], note: 'Could not read .docx file.' }).catch(() => {})
         errors++; continue
       }
 
@@ -223,38 +167,57 @@ export default function RecipeImport() {
         candidates = await findCandidates(entry.file.name)
       } catch {
         patch(entry.uid, { phase: 'error', errorMsg: 'Recipe search failed.' })
+        await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'error', duplicate: false, candidates: [], note: 'Recipe search failed.' }).catch(() => {})
         errors++; continue
       }
 
       if (candidates.length === 1) {
-        // Exactly one match — auto-upload immediately
         const match = candidates[0]
+        // Duplicate guard — don't silently overwrite a recipe that already has text
+        const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags,recipe_copy' }).catch(() => null)
+        const hasText = !!(current?.recipe_copy && String(current.recipe_copy).trim())
+        if (hasText) {
+          const dupCandidates = [{ ...match, has_text: true }]
+          patch(entry.uid, { phase: 'ready', rawText, candidates: dupCandidates, selectedId: match.id, expanded: true })
+          await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'duplicate', duplicate: true, candidates: dupCandidates }).catch(() => {})
+          duplicates++; continue
+        }
+        // Exactly one match, no existing text — auto-upload immediately
         patch(entry.uid, { phase: 'uploading', candidates, selectedId: match.id })
         try {
-          const { recipe: formatted, tags: aiTags } = await formatWithAI(rawText, match.recipe_name, apiKey)
-          const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags' })
-          const existing = Array.isArray(current.tags) ? current.tags as string[] : []
+          const { recipe: formatted, tags: aiTags } = await formatRecipeWithAI(rawText, match.recipe_name)
+          const existing = Array.isArray(current?.tags) ? current!.tags as string[] : []
           await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags)
           patch(entry.uid, { phase: 'done', formattedText: formatted })
           imported++
         } catch (err) {
           patch(entry.uid, { phase: 'error', errorMsg: err instanceof Error ? err.message : 'Upload failed' })
+          await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'error', duplicate: false, candidates, note: err instanceof Error ? err.message : 'Upload failed' }).catch(() => {})
           errors++
         }
       } else {
-        // 0 or 2+ matches — flag for manual review, expand so user sees them
+        // 0 or 2+ matches — flag candidates that already have text, persist for later
+        const withText: Candidate[] = await Promise.all(
+          candidates.map(async c => ({ ...c, has_text: await recipeHasText(c.id) }))
+        )
+        const isDup = withText.some(c => c.has_text)
         patch(entry.uid, {
           phase: 'ready',
           rawText,
-          candidates,
-          selectedId: candidates.length > 0 ? candidates[0].id : null,
+          candidates: withText,
+          selectedId: withText.length > 0 ? withText[0].id : null,
           expanded: true,
         })
+        await saveReviewItem({
+          file_name: entry.file.name, raw_text: rawText,
+          reason: candidates.length === 0 ? 'no_match' : 'multiple_matches',
+          duplicate: isDup, candidates: withText,
+        }).catch(() => {})
         review++
       }
     }
 
-    setAutoSummary({ imported, review, errors })
+    setAutoSummary({ imported, review, duplicates, errors })
     setAutoImporting(false)
   }
 
@@ -297,7 +260,6 @@ export default function RecipeImport() {
 
   // ── Upload manually selected ready entries ────────────────────────────────
   async function uploadSelected() {
-    if (!apiKey) { alert('Enter your OpenAI API key first.'); return }
     const queue = entries.filter(e => e.phase === 'ready' && e.selectedId)
     if (!queue.length) return
     setUploading(true)
@@ -312,7 +274,7 @@ export default function RecipeImport() {
 
       patch(entry.uid, { phase: 'uploading' })
       try {
-        const { recipe: formatted, tags: aiTags } = await formatWithAI(entry.rawText, match.recipe_name, apiKey)
+        const { recipe: formatted, tags: aiTags } = await formatRecipeWithAI(entry.rawText, match.recipe_name)
         const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags' })
         const existing = Array.isArray(current.tags) ? current.tags as string[] : []
         await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags)
@@ -343,28 +305,6 @@ export default function RecipeImport() {
         <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800">
           <ArrowLeft size={16} />
         </button>
-      </div>
-
-      {/* API key */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">OpenAI API Key</label>
-        <div className="relative">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={apiKey}
-            onChange={e => { setApiKey(e.target.value); localStorage.setItem('mints_openai_key', e.target.value) }}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-9 text-sm font-mono outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-            placeholder="sk-proj-..."
-          />
-          <button
-            type="button"
-            onClick={() => setShowKey(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          >
-            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 mt-1.5">Saved in your browser. Only used for AI formatting.</p>
       </div>
 
       {/* Drop zone */}
@@ -435,10 +375,23 @@ export default function RecipeImport() {
               {autoSummary.review} file{autoSummary.review !== 1 ? 's' : ''} need your review — see below
             </p>
           )}
+          {autoSummary.duplicates > 0 && (
+            <p className="text-sm text-orange-700 flex items-center gap-2">
+              <AlertCircle size={14} />
+              {autoSummary.duplicates} possible duplicate{autoSummary.duplicates !== 1 ? 's' : ''} — recipe already has text, not overwritten
+            </p>
+          )}
           {autoSummary.errors > 0 && (
             <p className="text-sm text-red-600 flex items-center gap-2">
               <XCircle size={14} />
               {autoSummary.errors} error{autoSummary.errors !== 1 ? 's' : ''}
+            </p>
+          )}
+          {(autoSummary.review + autoSummary.duplicates + autoSummary.errors) > 0 && (
+            <p className="text-xs text-gray-500 pt-1">
+              All skipped items are saved to the{' '}
+              <button onClick={() => navigate('/review')} className="underline hover:text-black">Review Later</button>{' '}
+              queue — you can resolve them anytime.
             </p>
           )}
         </div>
@@ -486,9 +439,9 @@ export default function RecipeImport() {
           {idleCount > 0 && (
             <button
               onClick={autoImportAll}
-              disabled={busy || !apiKey}
+              disabled={busy}
               className="flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-              title={!apiKey ? 'Enter your OpenAI API key first' : 'Auto-import clear matches, flag ambiguous for review'}
+              title="Auto-import clear matches, flag ambiguous for review"
             >
               {autoImporting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
               {autoImporting ? 'Auto-importing…' : `Auto-Import All (${idleCount})`}
@@ -497,9 +450,8 @@ export default function RecipeImport() {
           {readyCount > 0 && (
             <button
               onClick={uploadSelected}
-              disabled={busy || !apiKey}
+              disabled={busy}
               className="flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-              title={!apiKey ? 'Enter your OpenAI API key first' : ''}
             >
               {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
               {uploading ? 'Uploading…' : `Upload selected (${readyCount})`}
