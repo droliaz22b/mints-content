@@ -92,7 +92,14 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
 
   async function changeFolder() {
     await clearRootFolder()
+    setError('')
     setPhase('need-folder')
+  }
+
+  async function retry() {
+    const root = await getStoredRoot()
+    if (!root) { setError(''); setPhase('need-folder'); return }
+    await loadFromRoot(root)
   }
 
   async function regenerateAiPick() {
@@ -151,8 +158,19 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {error && (
-            <div className="m-5 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <div className="m-5 mb-0 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <AlertCircle size={15} className="flex-shrink-0 mt-0.5" /> <span>{error}</span>
+            </div>
+          )}
+
+          {phase === 'error' && supportsFolderPicker() && (
+            <div className="px-5 py-5 flex flex-wrap gap-3">
+              <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800">
+                <FolderOpen size={15} /> Choose a different folder
+              </button>
+              <button onClick={retry} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
+                <RefreshCw size={15} /> Try again
+              </button>
             </div>
           )}
 
