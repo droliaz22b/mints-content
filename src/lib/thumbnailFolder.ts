@@ -95,24 +95,41 @@ export async function getStoredRoot(): Promise<DirHandle | null> {
 }
 
 // ── navigating + reading ──────────────────────────────────────────────────────
-// Find the subfolder for a recipe's sl_no — exact name, or "<n> …"/"<n>-…"/"<n>_…".
-export async function findRecipeFolder(root: DirHandle, slNo: number): Promise<DirHandle | null> {
-  const key = String(slNo)
-  const r = root as unknown as {
-    getDirectoryHandle: (n: string) => Promise<DirHandle>
-    values: () => AsyncIterable<FileSystemHandle>
-  }
-  try {
-    return await r.getDirectoryHandle(key)
-  } catch { /* not an exact match — scan entries */ }
+const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
-  const prefixes = [`${key} `, `${key}-`, `${key}_`, `${key}.`]
-  for await (const entry of r.values()) {
-    if (entry.kind === 'directory' && (entry.name === key || prefixes.some(p => entry.name.startsWith(p)))) {
-      return entry as DirHandle
-    }
+// Score how well a folder name matches a recipe. Name is prioritized over sl_no,
+// but a matching number adds a strong boost (handles "1064 - Recipe Name" etc.).
+function scoreFolder(folderName: string, slNo: number, recipeName: string): number {
+  const nd = normalize(folderName)
+  const nName = normalize(recipeName)
+  const key = String(slNo)
+  let score = 0
+
+  if (nName) {
+    if (nd === nName) score += 100
+    else if (nd.includes(nName) && nName.length >= 4) score += 70
+    else if (nName.includes(nd) && nd.length >= 4) score += 50
   }
-  return null
+
+  // sl_no as a standalone number anywhere in the name (not part of a bigger number)
+  if (new RegExp(`(^|[^0-9])0*${key}([^0-9]|$)`).test(folderName)) score += 40
+  if (folderName === key) score += 60
+
+  return score
+}
+
+// Find the best-matching subfolder for a recipe, prioritizing the name and
+// falling back to the sl_no. Returns null if nothing matches well enough.
+export async function findRecipeFolder(root: DirHandle, slNo: number, recipeName: string): Promise<DirHandle | null> {
+  const r = root as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+  let best: DirHandle | null = null
+  let bestScore = 0
+  for await (const entry of r.values()) {
+    if (entry.kind !== 'directory') continue
+    const score = scoreFolder(entry.name, slNo, recipeName)
+    if (score > bestScore) { bestScore = score; best = entry as DirHandle }
+  }
+  return bestScore >= 40 ? best : null
 }
 
 // List image files in a folder (sorted naturally). getFile() is metadata-only;

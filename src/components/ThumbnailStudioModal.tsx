@@ -34,10 +34,10 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
 
   // ── Load images from the matching sl_no folder ──────────────────────────────
   const loadFromRoot = useCallback(async (root: FileSystemDirectoryHandle) => {
-    setPhase('loading'); setError(''); setStatus(`Finding folder "${recipe.sl_no}"…`)
-    const folder = await findRecipeFolder(root, recipe.sl_no)
+    setPhase('loading'); setError(''); setStatus('Finding the photo folder…')
+    const folder = await findRecipeFolder(root, recipe.sl_no, recipe.recipe_name)
     if (!folder) {
-      setError(`No folder named "${recipe.sl_no}" was found in the selected root folder.`)
+      setError(`No folder matching "${recipe.recipe_name}" or #${recipe.sl_no} was found in the selected root folder. The folder name should contain the recipe name or its number.`)
       setPhase('error'); return
     }
     let files
