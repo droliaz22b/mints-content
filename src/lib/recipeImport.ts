@@ -1,5 +1,5 @@
 import { pb } from './pocketbase'
-import { aiChat } from './ai'
+import { aiChat, AI_MODELS } from './ai'
 import { normalizeTagList } from './tagNormalize'
 
 // ─── Shared recipe-import logic (used by Import Docs + Review Later) ───────────
@@ -65,7 +65,7 @@ First reason briefly, then output JSON: { "reasoning": "<1-2 short sentences>", 
     : `Recipe name: "${recipeName}" (no recipe text available)`
 
   const data = await aiChat({
-    model: 'gpt-4o',
+    model: AI_MODELS.smart,
     temperature: 0.1,
     response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -133,6 +133,7 @@ export async function formatRecipeWithAI(
   rawText: string, recipeName: string, taxonomy?: CategoryTaxonomy
 ): Promise<AiFormatResult> {
   const data = await aiChat({
+    model: AI_MODELS.fast,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: buildPrompt(taxonomy) },

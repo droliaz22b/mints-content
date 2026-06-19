@@ -27,12 +27,26 @@ export interface ChatCompletion {
   choices: { message: { content: string } }[]
 }
 
+// ─── Model tiers by task intensity ────────────────────────────────────────────
+// Pick a tier at each call site by how much reasoning/accuracy the task needs.
+// Tune the model behind each tier here, in one place.
+//   fast   → high-volume, mechanical work (formatting, tag/ingredient extraction, captions)
+//   smart  → judgement & accuracy (categorization)
+//   vision → image understanding (thumbnail best-photo pick)
+export const AI_MODELS = {
+  fast: 'gpt-4o-mini',
+  smart: 'gpt-4o',
+  vision: 'gpt-4o',
+} as const
+export type AiTier = keyof typeof AI_MODELS
+
 // Calls the server proxy with the current user's login token (handled by the SDK).
 // Throws a ClientResponseError if the key is missing or OpenAI returns an error.
+// Defaults to the `fast` tier unless the payload specifies a model.
 export async function aiChat(payload: ChatPayload): Promise<ChatCompletion> {
   return pb.send<ChatCompletion>('/api/ai/chat', {
     method: 'POST',
-    body: { model: 'gpt-4o-mini', ...payload },
+    body: { model: AI_MODELS.fast, ...payload },
   })
 }
 

@@ -1,4 +1,4 @@
-import { aiChat } from './ai'
+import { aiChat, AI_MODELS } from './ai'
 
 // 9:16 thumbnail composition + AI "best photo" selection.
 
@@ -12,7 +12,7 @@ export async function pickBestImage(recipeName: string, dataUrls: string[]): Pro
   if (dataUrls.length <= 1) return 0
   try {
     const data = await aiChat({
-      model: 'gpt-4o',
+      model: AI_MODELS.vision,
       response_format: { type: 'json_object' },
       messages: [
         {

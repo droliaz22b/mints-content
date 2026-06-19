@@ -1,4 +1,4 @@
-import { aiChat } from './ai'
+import { aiChat, AI_MODELS } from './ai'
 
 export type CaptionPlatform = 'Facebook' | 'Instagram'
 
@@ -123,7 +123,7 @@ export async function generateCaption(
   const userMsg = `Recipe Name: ${recipeName}\nPlatform: ${platform}`
 
   const data = await aiChat({
-    model: 'gpt-4o-mini',
+    model: AI_MODELS.fast,
     temperature: 0.85,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -135,7 +135,7 @@ export async function generateCaption(
   // Enforce the word limit: if over, ask the model to compress once.
   if (captionWordCount(caption) > CAPTION_WORD_LIMIT) {
     const retry = await aiChat({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.fast,
       temperature: 0.5,
       messages: [
         { role: 'system', content: systemPrompt },
