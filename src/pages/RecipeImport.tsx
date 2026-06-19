@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
-import { formatRecipeWithAI, recipeHasText, saveReviewItem } from '../lib/recipeImport'
+import { formatRecipeWithAI, recipeHasText, saveReviewItem, loadCategoryTaxonomy } from '../lib/recipeImport'
 import { normalizeTagList } from '../lib/tagNormalize'
 import {
   Upload, FileText, CheckCircle, XCircle, Loader2,
@@ -132,7 +132,7 @@ export default function RecipeImport() {
   // ── Shared tag helper ──────────────────────────────────────────────────────
   async function applyTagsAndUpload(
     recipeId: string, existingTags: string[], aiTags: string[],
-    formatted: string, knownTags: Set<string>
+    formatted: string, knownTags: Set<string>, aiCategories: string[] = []
   ) {
     const existingLower = new Set(existingTags.map((t: string) => t.toLowerCase()))
     const newTags = normalizeTagList(aiTags).filter(t => !existingLower.has(t.toLowerCase()))
@@ -143,7 +143,9 @@ export default function RecipeImport() {
         knownTags.add(tag.toLowerCase())
       }
     }
-    await pb.collection('recipes').update(recipeId, { recipe_copy: formatted, tags: mergedTags })
+    const payload: Record<string, unknown> = { recipe_copy: formatted, tags: mergedTags }
+    if (aiCategories.length) payload.categories = aiCategories
+    await pb.collection('recipes').update(recipeId, payload)
   }
 
   // ── Auto-Import All: uploads clear matches, flags ambiguous for review ────
@@ -157,6 +159,7 @@ export default function RecipeImport() {
 
     const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
     const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
+    const taxonomy = await loadCategoryTaxonomy().catch(() => [])
 
     let imported = 0, review = 0, duplicates = 0, errors = 0
 
@@ -196,9 +199,9 @@ export default function RecipeImport() {
         // Exactly one match, no existing text — auto-upload immediately
         patch(entry.uid, { phase: 'uploading', candidates, selectedId: match.id })
         try {
-          const { recipe: formatted, tags: aiTags } = await formatRecipeWithAI(rawText, match.recipe_name)
+          const { recipe: formatted, tags: aiTags, categories: aiCats } = await formatRecipeWithAI(rawText, match.recipe_name, taxonomy)
           const existing = Array.isArray(current?.tags) ? current!.tags as string[] : []
-          await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags)
+          await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags, aiCats)
           patch(entry.uid, { phase: 'done', formattedText: formatted })
           imported++
         } catch (err) {
@@ -282,6 +285,7 @@ export default function RecipeImport() {
 
     const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
     const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
+    const taxonomy = await loadCategoryTaxonomy().catch(() => [])
 
     for (const entry of queue) {
       if (cancelRef.current) break
@@ -291,10 +295,10 @@ export default function RecipeImport() {
 
       patch(entry.uid, { phase: 'uploading' })
       try {
-        const { recipe: formatted, tags: aiTags } = await formatRecipeWithAI(entry.rawText, match.recipe_name)
+        const { recipe: formatted, tags: aiTags, categories: aiCats } = await formatRecipeWithAI(entry.rawText, match.recipe_name, taxonomy)
         const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags' })
         const existing = Array.isArray(current.tags) ? current.tags as string[] : []
-        await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags)
+        await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags, aiCats)
         patch(entry.uid, { phase: 'done', formattedText: formatted })
       } catch (err) {
         patch(entry.uid, { phase: 'error', errorMsg: err instanceof Error ? err.message : 'Upload failed' })

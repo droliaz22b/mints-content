@@ -7,7 +7,7 @@ export interface Recipe {
   recipe_name: string
   date: string
   editor: string
-  category: string
+  categories: string[]
   tags: string[]
   instagram_format: string
   youtube_format: string
@@ -25,6 +25,7 @@ export interface Recipe {
 export interface Category {
   id: string
   name: string
+  group: string
   created: string
 }
 

@@ -100,7 +100,7 @@ export default function Dashboard() {
       if (debouncedSearch) filters.push(`recipe_name ~ "${debouncedSearch}"`)
       if (filterStatus) filters.push(`status = "${filterStatus}"`)
       if (filterPlatform) filters.push(`platforms ~ "${filterPlatform}"`)
-      if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `category = "${c}"`).join(' || ')})`)
+      if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `categories ~ "${c}"`).join(' || ')})`)
       if (filterTags.length > 0) filters.push(`(${filterTags.map(t => `tags ~ "${t}"`).join(' || ')})`)
       if (filterHasText) filters.push(`recipe_copy != ""`)
 
@@ -187,9 +187,9 @@ export default function Dashboard() {
   }
 
   function exportCSV() {
-    const header = ['SL.No','Recipe Name','Category','Tags','Instagram','YouTube','FB','Docs','Thumbnails','Website Draft','Recipe Copy','Status','Platforms']
+    const header = ['SL.No','Recipe Name','Categories','Tags','Instagram','YouTube','FB','Docs','Thumbnails','Website Draft','Recipe Copy','Status','Platforms']
     const rows = recipes.map(r => [
-      r.sl_no, r.recipe_name, r.category,
+      r.sl_no, r.recipe_name, (r.categories || []).join('; '),
       (r.tags || []).join('; '),
       r.instagram_format, r.youtube_format, r.fb_editor,
       r.docs, r.thumbnails, r.website_draft,
@@ -657,7 +657,7 @@ function RecipeTable({ recipes, selected, onSelect, onPreview, onEdit, onDelete 
                 </td>
                 <td className="px-3 sm:px-4 py-3 text-gray-400 font-mono text-xs">{r.sl_no}</td>
                 <td className="px-3 sm:px-4 py-3 font-medium max-w-[160px] sm:max-w-xs truncate">{r.recipe_name}</td>
-                <td className="px-3 sm:px-4 py-3 text-gray-500 hidden md:table-cell">{r.category}</td>
+                <td className="px-3 sm:px-4 py-3 text-gray-500 hidden md:table-cell max-w-[200px] truncate">{(r.categories || []).join(', ')}</td>
                 <td className="px-3 sm:px-4 py-3 hidden lg:table-cell">
                   <div className="flex flex-wrap gap-1">
                     {(r.tags || []).slice(0, 3).map(t => <TagPill key={t} tag={t} size="xs" />)}
@@ -749,7 +749,7 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-gray-400 font-mono">#{r.sl_no}</span>
               <StatusBadge status={r.status} />
-              {r.category && <span className="text-xs text-gray-400">{r.category}</span>}
+              {(r.categories || []).length > 0 && <span className="text-xs text-gray-400 truncate max-w-[180px]">{r.categories.join(', ')}</span>}
             </div>
             <h2 className="text-lg font-bold leading-snug">{r.recipe_name}</h2>
           </div>

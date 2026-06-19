@@ -16,7 +16,7 @@ const EMPTY: Omit<Recipe, 'id' | 'created' | 'updated'> = {
   recipe_name: '',
   date: '',
   editor: '',
-  category: '',
+  categories: [],
   tags: [],
   instagram_format: '',
   youtube_format: '',
@@ -29,6 +29,26 @@ const EMPTY: Omit<Recipe, 'id' | 'created' | 'updated'> = {
   platforms: [],
 }
 
+// Group category records by their `group` field, preserving a sensible group order.
+const GROUP_ORDER = [
+  'Dish Type / Course', 'Cuisine / Region', 'Occasion / Festival',
+  'Dietary Preference', 'Cooking Method', 'Time / Effort', 'Season / Weather',
+]
+function groupCategories(records: { name: string; group?: string }[]): { group: string; items: string[] }[] {
+  const map = new Map<string, string[]>()
+  for (const r of records) {
+    const g = r.group || 'Other'
+    if (!map.has(g)) map.set(g, [])
+    map.get(g)!.push(r.name)
+  }
+  return [...map.entries()]
+    .sort((a, b) => {
+      const ia = GROUP_ORDER.indexOf(a[0]); const ib = GROUP_ORDER.indexOf(b[0])
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+    })
+    .map(([group, items]) => ({ group, items }))
+}
+
 export default function RecipeEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -38,7 +58,7 @@ export default function RecipeEditor() {
   const [tagInput, setTagInput] = useState('')
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([])
   const [allTags, setAllTags] = useState<string[]>([])
-  const [categories, setCategories] = useState<string[]>([])
+  const [categoryGroups, setCategoryGroups] = useState<{ group: string; items: string[] }[]>([])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -105,9 +125,11 @@ Example output: paneer, onion, capsicum, maida`,
     }
   }
 
-  // Load categories and tags
+  // Load categories (grouped) and tags
   useEffect(() => {
-    pb.collection('categories').getFullList({ sort: 'name' }).then(res => setCategories(res.map(c => c.name as string))).catch(() => {})
+    pb.collection('categories').getFullList({ sort: 'group,name' })
+      .then(res => setCategoryGroups(groupCategories(res as unknown as { name: string; group?: string }[])))
+      .catch(() => {})
     pb.collection('tags').getFullList({ sort: 'name' }).then(res => setAllTags(res.map(t => t.name as string))).catch(() => {})
   }, [])
 
@@ -136,7 +158,7 @@ Example output: paneer, onion, capsicum, maida`,
           recipe_name: r.recipe_name,
           date: r.date || '',
           editor: r.editor || '',
-          category: r.category || '',
+          categories: r.categories || [],
           tags: r.tags || [],
           instagram_format: r.instagram_format || '',
           youtube_format: r.youtube_format || '',
@@ -176,6 +198,10 @@ Example output: paneer, onion, capsicum, maida`,
 
   function togglePlatform(p: string) {
     set('platforms', form.platforms.includes(p) ? form.platforms.filter(x => x !== p) : [...form.platforms, p])
+  }
+
+  function toggleCategory(c: string) {
+    set('categories', form.categories.includes(c) ? form.categories.filter(x => x !== c) : [...form.categories, c])
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -262,17 +288,39 @@ Example output: paneer, onion, capsicum, maida`,
             />
           </Field>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <Field label="Category">
-              <select value={form.category} onChange={e => set('category', e.target.value)} className="input">
-                <option value="">— Select —</option>
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </Field>
-            <Field label="Date">
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="input" />
-            </Field>
+          <Field label="Date">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="input sm:max-w-xs" />
+          </Field>
+        </div>
+
+        {/* Categories — multi-select grouped by type */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Categories</h2>
+            {form.categories.length > 0 && <span className="text-[11px] text-gray-400">{form.categories.length} selected</span>}
           </div>
+          {categoryGroups.length === 0
+            ? <p className="text-xs text-gray-400">No categories defined yet. Add them in Masters.</p>
+            : categoryGroups.map(({ group, items }) => (
+              <div key={group}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{group}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map(c => {
+                    const on = form.categories.includes(c)
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => toggleCategory(c)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${on ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
+                      >
+                        {c}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
         </div>
 
         {/* Tags */}

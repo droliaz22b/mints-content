@@ -15,6 +15,7 @@ interface RawRow {
   sl_no?: unknown
   recipe_name?: unknown
   category?: unknown
+  categories?: unknown
   tags?: unknown
   instagram_format?: unknown
   instagram?: unknown
@@ -116,6 +117,11 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
     else if (typeof rawTags === 'string' && rawTags.trim()) tags = rawTags.split(/[,;]/).map(t => t.trim()).filter(Boolean)
     tags = normalizeTagList(tags)
 
+    const rawCats = row.categories ?? row.category
+    let categories: string[] = []
+    if (Array.isArray(rawCats)) categories = rawCats.map(String).map(c => c.trim()).filter(Boolean)
+    else if (typeof rawCats === 'string' && rawCats.trim()) categories = rawCats.split(/[,;]/).map(c => c.trim()).filter(Boolean)
+
     const rawPlatforms = row.platforms
     let platforms: string[] = []
     if (Array.isArray(rawPlatforms)) platforms = rawPlatforms.map(String)
@@ -126,7 +132,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
     return {
       sl_no: slNo,
       recipe_name: String(row.recipe_name || '').trim(),
-      category: String(row.category || '').trim(),
+      categories,
       tags,
       instagram_format: String(row.instagram_format || row['instagram'] || '').trim(),
       youtube_format: String(row.youtube_format || row['youtube'] || '').trim(),
@@ -175,8 +181,8 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
     onClose()
   }
 
-  const CSV_TEMPLATE = `sl_no,recipe_name,category,tags,instagram_format,youtube_format,fb_editor,docs,thumbnails,website_draft,recipe_copy,status,platforms
-1,Instant Kurkure,Snacks,"Snacks,Crispy",Reels,Short,RKK,Done,Done,Done,Recipe text here,Draft,"Facebook,Instagram"`
+  const CSV_TEMPLATE = `sl_no,recipe_name,categories,tags,instagram_format,youtube_format,fb_editor,docs,thumbnails,website_draft,recipe_copy,status,platforms
+1,Instant Kurkure,"Snacks & Appetizers,North Indian","Maida,Potato",Reels,Short,RKK,Done,Done,Done,Recipe text here,Draft,"Facebook,Instagram"`
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">

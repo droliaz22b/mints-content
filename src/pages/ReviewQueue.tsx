@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
-import { formatRecipeWithAI, attachToRecipe } from '../lib/recipeImport'
+import { formatRecipeWithAI, attachToRecipe, loadCategoryTaxonomy } from '../lib/recipeImport'
 import type { ReviewItem, ReviewCandidate, ReviewReason } from '../types'
 import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle, Search, Trash2,
@@ -133,8 +133,9 @@ function ReviewCard({ item, onResolved }: { item: ReviewItem; onResolved: () => 
     if (!selectedId) return
     setBusy('attach'); setErr('')
     try {
-      const { recipe: formatted, tags } = await formatRecipeWithAI(item.raw_text, selectedName)
-      await attachToRecipe(selectedId, formatted, tags)
+      const taxonomy = await loadCategoryTaxonomy()
+      const { recipe: formatted, tags, categories } = await formatRecipeWithAI(item.raw_text, selectedName, taxonomy)
+      await attachToRecipe(selectedId, formatted, tags, undefined, categories)
       await pb.collection('review_queue').update(item.id, { status: 'resolved', resolved_recipe: selectedId })
       onResolved()
     } catch (e) {
