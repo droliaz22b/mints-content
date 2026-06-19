@@ -95,27 +95,44 @@ export async function getStoredRoot(): Promise<DirHandle | null> {
 }
 
 // ── navigating + reading ──────────────────────────────────────────────────────
-const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+export const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
-// Score how well a folder name matches a recipe. Name is prioritized over sl_no,
-// but a matching number adds a strong boost (handles "1064 - Recipe Name" etc.).
-function scoreFolder(folderName: string, slNo: number, recipeName: string): number {
+export type NameMatch = 'exact' | 'partial' | 'none'
+
+export interface MatchComponents {
+  score: number
+  nameScore: number
+  numberScore: number
+  name: NameMatch
+  number: boolean
+}
+
+// Break down how well a folder name matches a recipe into name vs number signals.
+// Name is prioritized; a matching sl_no adds a strong boost ("1064 - Recipe Name").
+export function matchComponents(folderName: string, slNo: number, recipeName: string): MatchComponents {
   const nd = normalize(folderName)
   const nName = normalize(recipeName)
   const key = String(slNo)
-  let score = 0
 
+  let nameScore = 0
+  let name: NameMatch = 'none'
   if (nName) {
-    if (nd === nName) score += 100
-    else if (nd.includes(nName) && nName.length >= 4) score += 70
-    else if (nName.includes(nd) && nd.length >= 4) score += 50
+    if (nd === nName) { nameScore = 100; name = 'exact' }
+    else if (nd.includes(nName) && nName.length >= 4) { nameScore = 70; name = 'partial' }
+    else if (nName.includes(nd) && nd.length >= 4) { nameScore = 50; name = 'partial' }
   }
 
+  let numberScore = 0
   // sl_no as a standalone number anywhere in the name (not part of a bigger number)
-  if (new RegExp(`(^|[^0-9])0*${key}([^0-9]|$)`).test(folderName)) score += 40
-  if (folderName === key) score += 60
+  if (new RegExp(`(^|[^0-9])0*${key}([^0-9]|$)`).test(folderName)) numberScore += 40
+  if (folderName === key) numberScore += 60
 
-  return score
+  return { score: nameScore + numberScore, nameScore, numberScore, name, number: numberScore > 0 }
+}
+
+// Score how well a folder name matches a recipe (name prioritized over sl_no).
+function scoreFolder(folderName: string, slNo: number, recipeName: string): number {
+  return matchComponents(folderName, slNo, recipeName).score
 }
 
 // Find the best-matching subfolder for a recipe, prioritizing the name and
@@ -141,6 +158,26 @@ export async function listImages(dir: DirHandle): Promise<FolderImage[]> {
     if (entry.kind === 'file' && IMAGE_RE.test(entry.name)) {
       out.push({ name: entry.name, file: await (entry as FileSystemFileHandle).getFile() })
     }
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  return out
+}
+
+export interface SubFolder { name: string; imageCount: number }
+
+// Enumerate the root's immediate sub-folders with how many images each contains.
+// Used by the Photo Audit to cross-tally folders against the recipe database.
+export async function listSubfolders(root: DirHandle): Promise<SubFolder[]> {
+  const r = root as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+  const out: SubFolder[] = []
+  for await (const entry of r.values()) {
+    if (entry.kind !== 'directory') continue
+    let imageCount = 0
+    const d = entry as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+    for await (const child of d.values()) {
+      if (child.kind === 'file' && IMAGE_RE.test(child.name)) imageCount++
+    }
+    out.push({ name: entry.name, imageCount })
   }
   out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   return out

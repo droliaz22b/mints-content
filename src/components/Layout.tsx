@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
-import { ChefHat, ChevronDown, KeyRound, Users, LogOut, Menu, X, LayoutGrid, Settings, SlidersHorizontal, FileUp, ClipboardList } from 'lucide-react'
+import { ChefHat, ChevronDown, KeyRound, Users, LogOut, Menu, X, LayoutGrid, Settings, SlidersHorizontal, FileUp, ClipboardList, FolderSearch } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 
@@ -109,6 +109,14 @@ export default function Layout() {
                       <ClipboardList size={14} /> Review Later
                     </button>
                   )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => { navigate('/photo-audit'); setMenuOpen(false) }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <FolderSearch size={14} /> Photo Audit
+                    </button>
+                  )}
                   <button
                     onClick={() => { navigate('/change-password'); setMenuOpen(false) }}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -208,6 +216,17 @@ export default function Layout() {
                 }
               >
                 <ClipboardList size={16} /> Review Later
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink
+                to="/photo-audit"
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-gray-100 text-black font-medium' : 'text-gray-600'}`
+                }
+              >
+                <FolderSearch size={16} /> Photo Audit
               </NavLink>
             )}
             <div className="border-t border-gray-100 mt-1 pt-1">
