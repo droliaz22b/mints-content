@@ -832,9 +832,15 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-gray-400 font-mono">#{r.sl_no}</span>
               <StatusBadge status={r.status} />
-              {(r.categories || []).length > 0 && <span className="text-xs text-gray-400 truncate max-w-[180px]">{r.categories.join(', ')}</span>}
             </div>
             <h2 className="text-lg font-bold leading-snug">{r.recipe_name}</h2>
+            {(r.categories || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {r.categories.map(c => (
+                  <span key={c} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">{c}</span>
+                ))}
+              </div>
+            )}
           </div>
           <button onClick={onClose} className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700">
             <X size={16} />
