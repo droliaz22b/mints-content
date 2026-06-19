@@ -86,7 +86,8 @@ export interface ThumbnailOptions {
   lineGap?: number // vertical space between line 1 and line 2 (px; can be negative to tighten)
 }
 
-export const DEFAULT_FONT_SIZE = 150
+export const DEFAULT_FONT_SIZE_1 = 198
+export const DEFAULT_FONT_SIZE_2 = 204
 export const MIN_FONT_SIZE = 40
 export const MAX_FONT_SIZE = 240
 
@@ -94,11 +95,11 @@ export const DEFAULT_BANNER_WIDTH = THUMB_W - 96 // 984 — matches the original
 export const MIN_BANNER_WIDTH = 480
 export const MAX_BANNER_WIDTH = THUMB_W - 16 // 1064
 
-export const DEFAULT_PADDING_Y = 36
+export const DEFAULT_PADDING_Y = 8
 export const MIN_PADDING_Y = 8
 export const MAX_PADDING_Y = 140
 
-export const DEFAULT_LINE_GAP = 0
+export const DEFAULT_LINE_GAP = -70
 export const MIN_LINE_GAP = -80
 export const MAX_LINE_GAP = 160
 
@@ -131,8 +132,8 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
     const padY = opts.paddingY ?? DEFAULT_PADDING_Y
     const lineGap = line1 && line2 ? (opts.lineGap ?? DEFAULT_LINE_GAP) : 0
 
-    const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, opts.size1 ?? DEFAULT_FONT_SIZE) : 0
-    const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, opts.size2 ?? DEFAULT_FONT_SIZE) : 0
+    const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, opts.size1 ?? DEFAULT_FONT_SIZE_1) : 0
+    const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, opts.size2 ?? DEFAULT_FONT_SIZE_2) : 0
 
     // Box hugs the text: height = top/bottom padding + both lines + the gap between them.
     const bh = padY * 2 + s1 + s2 + lineGap

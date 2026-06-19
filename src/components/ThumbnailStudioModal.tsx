@@ -8,7 +8,7 @@ import {
 import {
   pickBestImage, composeThumbnail, defaultTitleLines,
   DEFAULT_COLOR_1, DEFAULT_COLOR_2,
-  DEFAULT_FONT_SIZE, MIN_FONT_SIZE, MAX_FONT_SIZE,
+  DEFAULT_FONT_SIZE_1, DEFAULT_FONT_SIZE_2, MIN_FONT_SIZE, MAX_FONT_SIZE,
   DEFAULT_BANNER_WIDTH, MIN_BANNER_WIDTH, MAX_BANNER_WIDTH,
   DEFAULT_PADDING_Y, MIN_PADDING_Y, MAX_PADDING_Y,
   DEFAULT_LINE_GAP, MIN_LINE_GAP, MAX_LINE_GAP,
@@ -31,8 +31,8 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
   const [line2, setLine2] = useState(init.line2)
   const [color1, setColor1] = useState(DEFAULT_COLOR_1)
   const [color2, setColor2] = useState(DEFAULT_COLOR_2)
-  const [size1, setSize1] = useState(DEFAULT_FONT_SIZE)
-  const [size2, setSize2] = useState(DEFAULT_FONT_SIZE)
+  const [size1, setSize1] = useState(DEFAULT_FONT_SIZE_1)
+  const [size2, setSize2] = useState(DEFAULT_FONT_SIZE_2)
   const [bannerWidth, setBannerWidth] = useState(DEFAULT_BANNER_WIDTH)
   const [paddingY, setPaddingY] = useState(DEFAULT_PADDING_Y)
   const [lineGap, setLineGap] = useState(DEFAULT_LINE_GAP)
