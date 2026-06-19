@@ -132,8 +132,8 @@ export async function generateCaption(
   })
   let caption = data.choices[0].message.content.trim()
 
-  // Enforce the word limit: if over, ask the model to compress (up to 2 retries).
-  for (let attempt = 0; attempt < 2 && captionWordCount(caption) > CAPTION_WORD_LIMIT; attempt++) {
+  // Enforce the word limit: if over, ask the model to compress once.
+  if (captionWordCount(caption) > CAPTION_WORD_LIMIT) {
     const retry = await aiChat({
       model: 'gpt-4o-mini',
       temperature: 0.5,
