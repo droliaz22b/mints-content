@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import { preprocessToMarkdown } from '../lib/formatRecipe'
 import { generateCaption, type CaptionPlatform } from '../lib/caption'
+import { groupCategories, type CategoryGroup } from '../lib/categories'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import ThumbnailStudioModal from '../components/ThumbnailStudioModal'
@@ -61,6 +62,8 @@ export default function Dashboard() {
 
   const [allTags, setAllTags] = useState<string[]>([])
   const [allCategories, setAllCategories] = useState<string[]>([])
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([])
+  const [activeGroup, setActiveGroup] = useState('')
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
 
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
@@ -138,10 +141,13 @@ export default function Dashboard() {
       try {
         const [tagsRes, catsRes] = await Promise.all([
           pb.collection('tags').getFullList({ sort: 'name' }),
-          pb.collection('categories').getFullList({ sort: 'name' }),
+          pb.collection('categories').getFullList({ sort: 'group,name' }),
         ])
         setAllTags(tagsRes.map(t => t.name as string))
         setAllCategories(catsRes.map(c => c.name as string))
+        const groups = groupCategories(catsRes as unknown as { name: string; group?: string }[])
+        setCategoryGroups(groups)
+        setActiveGroup(prev => prev || groups[0]?.group || '')
       } catch { /* non-critical */ }
 
       try {
@@ -402,11 +408,34 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {allCategories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 sm:-mx-6 sm:px-6">
-              <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Categories</span>
-              <div className="flex gap-1.5 py-0.5">
-                {allCategories.map(c => (
+          {categoryGroups.length > 0 && (
+            <div className="space-y-1">
+              {/* Group selector — navigate categories one group at a time */}
+              <div className="flex items-center gap-2 -mx-3 px-3 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-none">
+                <span className="flex-shrink-0 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16 sm:w-20">Categories</span>
+                <div className="flex gap-1 py-0.5">
+                  {categoryGroups.map(({ group, items }) => {
+                    const activeCount = items.filter(c => filterCategories.includes(c)).length
+                    return (
+                      <button
+                        key={group}
+                        onClick={() => setActiveGroup(group)}
+                        className={`flex-shrink-0 text-[11px] px-2.5 py-0.5 rounded-md font-medium transition-colors whitespace-nowrap ${activeGroup === group ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}
+                      >
+                        {group}{activeCount > 0 && <span className="ml-1 text-[9px] align-top bg-gray-900 text-white rounded-full px-1">{activeCount}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+                {filterCategories.length > 0 && (
+                  <button onClick={() => { setFilterCategories([]); setPage(1) }} className="text-[10px] text-gray-400 hover:text-gray-700 flex-shrink-0">
+                    clear ({filterCategories.length})
+                  </button>
+                )}
+              </div>
+              {/* Chips for the active group */}
+              <div className="flex flex-wrap gap-1.5 -mx-3 px-3 sm:-mx-6 sm:px-6 pb-0.5 sm:pl-[88px]">
+                {(categoryGroups.find(g => g.group === activeGroup)?.items ?? []).map(c => (
                   <button
                     key={c}
                     onClick={() => { setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]); setPage(1) }}

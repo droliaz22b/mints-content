@@ -5,6 +5,7 @@ import { pb } from '../lib/pocketbase'
 import { aiChat } from '../lib/ai'
 import { preprocessToMarkdown, FORMAT_SYSTEM_PROMPT } from '../lib/formatRecipe'
 import { normalizeTagList } from '../lib/tagNormalize'
+import { groupCategories } from '../lib/categories'
 import type { Recipe, RecipeStatus } from '../types'
 import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus, Sparkles } from 'lucide-react'
 
@@ -27,26 +28,6 @@ const EMPTY: Omit<Recipe, 'id' | 'created' | 'updated'> = {
   recipe_copy: '',
   status: 'Draft',
   platforms: [],
-}
-
-// Group category records by their `group` field, preserving a sensible group order.
-const GROUP_ORDER = [
-  'Dish Type / Course', 'Cuisine / Region', 'Occasion / Festival',
-  'Dietary Preference', 'Cooking Method', 'Time / Effort', 'Season / Weather',
-]
-function groupCategories(records: { name: string; group?: string }[]): { group: string; items: string[] }[] {
-  const map = new Map<string, string[]>()
-  for (const r of records) {
-    const g = r.group || 'Other'
-    if (!map.has(g)) map.set(g, [])
-    map.get(g)!.push(r.name)
-  }
-  return [...map.entries()]
-    .sort((a, b) => {
-      const ia = GROUP_ORDER.indexOf(a[0]); const ib = GROUP_ORDER.indexOf(b[0])
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
-    })
-    .map(([group, items]) => ({ group, items }))
 }
 
 export default function RecipeEditor() {
