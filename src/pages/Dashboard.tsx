@@ -19,6 +19,18 @@ import {
   Copy, Check, Sparkles, Loader2,
 } from 'lucide-react'
 
+// PocketBase stores JSON fields with Go's HTML escaping (& < > → & < >),
+// and the `~` filter matches that raw text. Escape these so values like
+// "Desserts & Sweets" actually match. Also escape quotes/backslashes for safety.
+function jsonLike(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/&/g, '\\u0026')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+}
+
 const SORT_OPTIONS = [
   { label: 'SL.No ↑',  value: '+sl_no' },
   { label: 'SL.No ↓',  value: '-sl_no' },
@@ -102,9 +114,9 @@ export default function Dashboard() {
       const filters: string[] = []
       if (debouncedSearch) filters.push(`recipe_name ~ "${debouncedSearch}"`)
       if (filterStatus) filters.push(`status = "${filterStatus}"`)
-      if (filterPlatform) filters.push(`platforms ~ "${filterPlatform}"`)
-      if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `categories ~ "${c}"`).join(' || ')})`)
-      if (filterTags.length > 0) filters.push(`(${filterTags.map(t => `tags ~ "${t}"`).join(' || ')})`)
+      if (filterPlatform) filters.push(`platforms ~ "${jsonLike(filterPlatform)}"`)
+      if (filterCategories.length > 0) filters.push(`(${filterCategories.map(c => `categories ~ "${jsonLike(c)}"`).join(' || ')})`)
+      if (filterTags.length > 0) filters.push(`(${filterTags.map(t => `tags ~ "${jsonLike(t)}"`).join(' || ')})`)
       if (filterHasText) filters.push(`recipe_copy != ""`)
 
       const result = await pb.collection('recipes').getList<Recipe>(page, PER_PAGE, {
