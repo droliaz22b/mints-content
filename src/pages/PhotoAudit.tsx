@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
 import {
   supportsFolderPicker, pickRootFolder, getStoredRoot, clearRootFolder, listSubfolders,
+  type SubFolder,
 } from '../lib/thumbnailFolder'
 import {
-  reconcile, auditToCsv, parseRange, recommendRow, recommendOrphan, STATUS_LABELS,
-  type AuditResult, type AuditRecipe, type AuditStatus, type Recommendation,
+  reconcile, auditToCsv, parseRange, recommendRow, recommendOrphan,
+  folderToRecipeName, namesLookRelated, STATUS_LABELS,
+  type AuditResult, type AuditRecipe, type AuditStatus, type Recommendation, type RecipeRow,
 } from '../lib/thumbnailAudit'
 import {
   Loader2, AlertCircle, FolderOpen, RefreshCw, Download, FolderSearch, CheckCircle2,
-  Copy, Check, SquarePen,
+  Copy, Check, SquarePen, Database,
 } from 'lucide-react'
 
 type Phase = 'init' | 'need-folder' | 'loading' | 'ready' | 'error'
@@ -37,34 +39,52 @@ export default function PhotoAudit() {
   const [filter, setFilter] = useState<AuditStatus | 'orphan' | 'all'>('all')
   const [scope, setScope] = useState('') // human description of what was audited
 
+  // Kept so we can re-tally locally after fixing a recipe name in the DB.
+  const [recipes, setRecipes] = useState<AuditRecipe[]>([])
+  const [folders, setFolders] = useState<SubFolder[]>([])
+  const [range, setRange] = useState<{ min: number; max: number } | null>(null)
+  const [rootName, setRootName] = useState('')
+
+  const compute = useCallback((recs: AuditRecipe[], flds: SubFolder[], rng: { min: number; max: number } | null, name: string) => {
+    if (rng) {
+      const slice = recs.filter(r => r.sl_no >= rng.min && r.sl_no <= rng.max)
+      setScope(`Folder “${name}” · recipes ${rng.min}–${rng.max} (${slice.length} in database)`)
+      setResult(reconcile(slice, flds, { includeMissing: true }))
+    } else {
+      setScope(`Folder “${name}” · no numeric range — matching folders to recipes by name only`)
+      setResult(reconcile(recs, flds, { includeMissing: false }))
+    }
+  }, [])
+
   const run = useCallback(async (root: FileSystemDirectoryHandle) => {
     setPhase('loading'); setError(''); setFilter('all')
     try {
       setStatus('Loading recipes from the database…')
-      const recipes = await pb.collection('recipes').getFullList<AuditRecipe>({
+      const recs = await pb.collection('recipes').getFullList<AuditRecipe>({
         fields: 'id,sl_no,recipe_name', sort: '+sl_no', batch: 500,
       })
 
       setStatus('Scanning image folders…')
-      const folders = await listSubfolders(root)
+      const flds = await listSubfolders(root)
+      const rng = parseRange(root.name)
 
       setStatus('Cross-tallying…')
-      // Picked folder is a range like "401-600": audit only that slice of recipes.
-      const range = parseRange(root.name)
-      if (range) {
-        const slice = recipes.filter(r => r.sl_no >= range.min && r.sl_no <= range.max)
-        setScope(`Folder “${root.name}” · recipes ${range.min}–${range.max} (${slice.length} in database)`)
-        setResult(reconcile(slice, folders, { includeMissing: true }))
-      } else {
-        setScope(`Folder “${root.name}” · no numeric range — matching folders to recipes by name only`)
-        setResult(reconcile(recipes, folders, { includeMissing: false }))
-      }
+      setRecipes(recs); setFolders(flds); setRange(rng); setRootName(root.name)
+      compute(recs, flds, rng, root.name)
       setPhase('ready'); setStatus('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not run the audit.')
       setPhase('error')
     }
-  }, [])
+  }, [compute])
+
+  // Update a recipe's name in the DB, then re-tally without re-scanning the disk.
+  const saveRecipeName = useCallback(async (id: string, newName: string) => {
+    await pb.collection('recipes').update(id, { recipe_name: newName })
+    const recs = recipes.map(r => (r.id === id ? { ...r, recipe_name: newName } : r))
+    setRecipes(recs)
+    compute(recs, folders, range, rootName)
+  }, [recipes, folders, range, rootName, compute])
 
   useEffect(() => {
     (async () => {
@@ -194,7 +214,11 @@ export default function PhotoAudit() {
                       <td className="px-4 py-2.5"><span className="text-gray-400 font-mono text-xs mr-1.5">#{r.recipe.sl_no}</span>{r.recipe.recipe_name}</td>
                       <td className="px-4 py-2.5 text-gray-600">{r.folderName ?? <span className="text-gray-300">—</span>}</td>
                       <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">{r.folderName ? r.imageCount : ''}</td>
-                      <td className="px-4 py-2.5">{r.status === 'ok' ? <span className="text-xs text-gray-300">—</span> : <RecommendCell rec={recommendRow(r)} />}</td>
+                      <td className="px-4 py-2.5">
+                        {r.status === 'ok'
+                          ? <span className="text-xs text-gray-300">—</span>
+                          : <ActionCell row={r} onSaveName={saveRecipeName} />}
+                      </td>
                     </tr>
                   ))}
                   {showRows.length === 0 && (
@@ -237,6 +261,73 @@ export default function PhotoAudit() {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+// Recommendation + (for "broadly the same" name mismatches) an inline DB fix.
+function ActionCell({ row, onSaveName }: { row: RecipeRow; onSaveName: (id: string, name: string) => Promise<void> }) {
+  const canFixInDb = row.status === 'name_mismatch' && !!row.folderName && namesLookRelated(row.folderName, row.recipe.recipe_name)
+  return (
+    <div className="space-y-2">
+      <RecommendCell rec={recommendRow(row)} />
+      {canFixInDb && (
+        <NameFixer
+          current={row.recipe.recipe_name}
+          suggestion={folderToRecipeName(row.folderName as string)}
+          onSave={name => onSaveName(row.recipe.id, name)}
+        />
+      )}
+    </div>
+  )
+}
+
+function NameFixer({ current, suggestion, onSave }: {
+  current: string; suggestion: string; onSave: (name: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState(suggestion)
+  const [saving, setSaving] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function save() {
+    const name = value.trim()
+    if (!name || name === current) { setOpen(false); return }
+    setSaving(true); setErr('')
+    try { await onSave(name); setDone(true); setOpen(false) }
+    catch (e) { setErr(e instanceof Error ? e.message : 'Save failed') }
+    finally { setSaving(false) }
+  }
+
+  if (done) return <span className="inline-flex items-center gap-1 text-[11px] text-green-700"><Check size={11} /> DB name updated</span>
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setValue(suggestion); setOpen(true) }}
+        className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+        title={`Set the recipe name in the database to “${suggestion}”`}
+      >
+        <Database size={11} /> Fix name in DB
+      </button>
+    )
+  }
+  return (
+    <div className="space-y-1">
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setOpen(false) }}
+        autoFocus
+        className="w-full border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+      />
+      <div className="flex items-center gap-1.5">
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-black text-white hover:bg-gray-800 disabled:opacity-50">
+          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save to DB
+        </button>
+        <button onClick={() => setOpen(false)} className="text-[11px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-600">Cancel</button>
+      </div>
+      {err && <p className="text-[11px] text-red-600">{err}</p>}
     </div>
   )
 }

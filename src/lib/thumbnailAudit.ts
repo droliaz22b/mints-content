@@ -160,6 +160,29 @@ export function canonicalFolderName(slNo: number, recipeName: string): string {
   return `${slNo} - ${recipeName}`
 }
 
+// Strip a leading sl_no / padding / separators from a folder name → bare name.
+// "05 Maggi Shots" → "Maggi Shots";  "5 - Italian Maggi Shots" → "Italian Maggi Shots".
+export function folderToRecipeName(folderName: string): string {
+  return folderName.replace(/^\s*0*\d+\s*[-–—.):]*\s*/, '').trim()
+}
+
+const meaningful = (t: string) => t.length >= 3 && !/^\d+$/.test(t)
+function wordSet(s: string): Set<string> {
+  return new Set(s.toLowerCase().split(/[^a-z0-9]+/i).filter(meaningful))
+}
+
+// True when the folder and recipe names are "broadly the same" — they share most
+// of their meaningful words (e.g. a dropped/added word or minor wording). These
+// are safe to reconcile by editing the recipe name in the DB.
+export function namesLookRelated(folderName: string, recipeName: string): boolean {
+  const a = wordSet(folderToRecipeName(folderName))
+  const b = wordSet(recipeName)
+  if (!a.size || !b.size) return false
+  let shared = 0
+  for (const w of a) if (b.has(w)) shared++
+  return shared > 0 && shared >= Math.min(a.size, b.size) * 0.5
+}
+
 export interface Recommendation {
   text: string // what to do
   copy?: string // a value worth copying (usually the correct folder name)
