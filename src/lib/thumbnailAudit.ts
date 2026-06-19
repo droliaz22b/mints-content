@@ -155,6 +155,51 @@ export function reconcile(recipes: AuditRecipe[], folders: SubFolder[], opts: Re
   return { rows: reportedRows, orphans, counts }
 }
 
+// Canonical folder name we recommend ("45 - Paneer Tikka").
+export function canonicalFolderName(slNo: number, recipeName: string): string {
+  return `${slNo} - ${recipeName}`
+}
+
+export interface Recommendation {
+  text: string // what to do
+  copy?: string // a value worth copying (usually the correct folder name)
+  recipeId?: string // if set, offer an "Open recipe" link
+}
+
+// Suggested fix for a recipe row.
+export function recommendRow(row: RecipeRow): Recommendation {
+  const { recipe, folderName } = row
+  const canonical = canonicalFolderName(recipe.sl_no, recipe.recipe_name)
+  switch (row.status) {
+    case 'ok':
+      return { text: 'No action needed' }
+    case 'name_mismatch':
+      return { text: `Rename folder “${folderName}” to match the recipe`, copy: canonical, recipeId: recipe.id }
+    case 'number_mismatch':
+      return { text: `Add the sl_no to folder “${folderName}”`, copy: canonical, recipeId: recipe.id }
+    case 'missing':
+      return { text: 'Create a folder for this recipe', copy: canonical, recipeId: recipe.id }
+    case 'no_images':
+      return { text: `Add photos to “${folderName}” (or check it isn’t nested too deep)` }
+    case 'ambiguous':
+      return { text: `Confirm “${folderName}” is right; rename the look-alike folder`, recipeId: recipe.id }
+    case 'conflict':
+      return { text: `Two recipes claim “${folderName}” — fix the wrong sl_no on one folder`, recipeId: recipe.id }
+  }
+}
+
+// Suggested fix for an orphan folder.
+export function recommendOrphan(o: OrphanFolder): Recommendation {
+  if (o.guessRecipe) {
+    return {
+      text: `Looks like #${o.guessRecipe.sl_no} ${o.guessRecipe.recipe_name} — rename to match`,
+      copy: canonicalFolderName(o.guessRecipe.sl_no, o.guessRecipe.recipe_name),
+      recipeId: o.guessRecipe.id,
+    }
+  }
+  return { text: 'No matching recipe — fix the sl_no/name or remove the folder' }
+}
+
 export const STATUS_LABELS: Record<AuditStatus, string> = {
   ok: 'OK',
   name_mismatch: 'Name mismatch',
@@ -168,19 +213,22 @@ export const STATUS_LABELS: Record<AuditStatus, string> = {
 // CSV of the full report (recipe rows + orphan folders).
 export function auditToCsv(result: AuditResult): string {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
-  const head = ['type', 'status', 'sl_no', 'recipe_name', 'matched_folder', 'images', 'note']
+  const head = ['type', 'status', 'sl_no', 'recipe_name', 'matched_folder', 'images', 'note', 'recommended_action', 'suggested_name']
   const lines = [head.join(',')]
   for (const r of result.rows) {
+    const rec = recommendRow(r)
     lines.push([
       esc('recipe'), esc(STATUS_LABELS[r.status]), esc(r.recipe.sl_no), esc(r.recipe.recipe_name),
-      esc(r.folderName ?? ''), esc(r.imageCount), esc(r.note),
+      esc(r.folderName ?? ''), esc(r.imageCount), esc(r.note), esc(rec.text), esc(rec.copy ?? ''),
     ].join(','))
   }
   for (const o of result.orphans) {
+    const rec = recommendOrphan(o)
     lines.push([
       esc('orphan_folder'), esc('Orphan folder'), esc(''), esc(''),
       esc(o.name), esc(o.imageCount),
       esc(o.guessRecipe ? `Closest recipe: #${o.guessRecipe.sl_no} ${o.guessRecipe.recipe_name}` : 'No close recipe'),
+      esc(rec.text), esc(rec.copy ?? ''),
     ].join(','))
   }
   return lines.join('\n')

@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
 import {
   supportsFolderPicker, pickRootFolder, getStoredRoot, clearRootFolder, listSubfolders,
 } from '../lib/thumbnailFolder'
 import {
-  reconcile, auditToCsv, parseRange, STATUS_LABELS,
-  type AuditResult, type AuditRecipe, type AuditStatus,
+  reconcile, auditToCsv, parseRange, recommendRow, recommendOrphan, STATUS_LABELS,
+  type AuditResult, type AuditRecipe, type AuditStatus, type Recommendation,
 } from '../lib/thumbnailAudit'
 import {
   Loader2, AlertCircle, FolderOpen, RefreshCw, Download, FolderSearch, CheckCircle2,
+  Copy, Check, SquarePen,
 } from 'lucide-react'
 
 type Phase = 'init' | 'need-folder' | 'loading' | 'ready' | 'error'
@@ -182,7 +184,7 @@ export default function PhotoAudit() {
                     <th className="text-left font-medium px-4 py-2.5">Recipe</th>
                     <th className="text-left font-medium px-4 py-2.5">Matched folder</th>
                     <th className="text-right font-medium px-4 py-2.5 w-16">Imgs</th>
-                    <th className="text-left font-medium px-4 py-2.5">Note</th>
+                    <th className="text-left font-medium px-4 py-2.5 w-72">Recommended action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -192,7 +194,7 @@ export default function PhotoAudit() {
                       <td className="px-4 py-2.5"><span className="text-gray-400 font-mono text-xs mr-1.5">#{r.recipe.sl_no}</span>{r.recipe.recipe_name}</td>
                       <td className="px-4 py-2.5 text-gray-600">{r.folderName ?? <span className="text-gray-300">—</span>}</td>
                       <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">{r.folderName ? r.imageCount : ''}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-xs">{r.note}</td>
+                      <td className="px-4 py-2.5">{r.status === 'ok' ? <span className="text-xs text-gray-300">—</span> : <RecommendCell rec={recommendRow(r)} />}</td>
                     </tr>
                   ))}
                   {showRows.length === 0 && (
@@ -214,19 +216,15 @@ export default function PhotoAudit() {
                   <tr>
                     <th className="text-left font-medium px-4 py-2.5">Folder</th>
                     <th className="text-right font-medium px-4 py-2.5 w-16">Imgs</th>
-                    <th className="text-left font-medium px-4 py-2.5">Closest recipe (unmatched)</th>
+                    <th className="text-left font-medium px-4 py-2.5 w-80">Recommended action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {showOrphans.map(o => (
-                    <tr key={o.name} className="hover:bg-gray-50/60">
+                    <tr key={o.name} className="align-top hover:bg-gray-50/60">
                       <td className="px-4 py-2.5 text-gray-700">{o.name}</td>
                       <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">{o.imageCount}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-xs">
-                        {o.guessRecipe
-                          ? <>#{o.guessRecipe.sl_no} {o.guessRecipe.recipe_name} <span className="text-gray-300">(too weak to match)</span></>
-                          : <span className="text-gray-300">No close recipe</span>}
-                      </td>
+                      <td className="px-4 py-2.5"><RecommendCell rec={recommendOrphan(o)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -239,6 +237,43 @@ export default function PhotoAudit() {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+function RecommendCell({ rec }: { rec: Recommendation }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    if (!rec.copy) return
+    try {
+      await navigator.clipboard.writeText(rec.copy)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch { /* clipboard blocked */ }
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-gray-600">{rec.text}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {rec.copy && (
+          <button
+            onClick={copy}
+            className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-700"
+            title={`Copy "${rec.copy}"`}
+          >
+            {copied ? <Check size={11} className="text-green-600" /> : <Copy size={11} />}
+            {copied ? 'Copied' : 'Copy name'}
+          </button>
+        )}
+        {rec.recipeId && (
+          <Link
+            to={`/recipe/${rec.recipeId}/edit`}
+            className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-700"
+          >
+            <SquarePen size={11} /> Open recipe
+          </Link>
+        )}
+      </div>
     </div>
   )
 }
