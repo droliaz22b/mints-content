@@ -129,9 +129,15 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
 
     const status = STATUSES.includes(String(row.status) as RecipeStatus) ? String(row.status) as RecipeStatus : 'Draft'
 
+    const recipeName = String(row.recipe_name || '').trim()
+    let recipeCopy = String(row.recipe_copy || '').trim()
+    // Guard: a recipe_copy that is just the recipe name isn't real text — treat as empty
+    // so it doesn't show "has text" or get flagged as a duplicate by the docx import.
+    if (recipeCopy && recipeCopy.toLowerCase() === recipeName.toLowerCase()) recipeCopy = ''
+
     return {
       sl_no: slNo,
-      recipe_name: String(row.recipe_name || '').trim(),
+      recipe_name: recipeName,
       categories,
       tags,
       instagram_format: String(row.instagram_format || row['instagram'] || '').trim(),
@@ -140,7 +146,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
       docs: String(row.docs || '').trim(),
       thumbnails: String(row.thumbnails || '').trim(),
       website_draft: String(row.website_draft || '').trim(),
-      recipe_copy: String(row.recipe_copy || '').trim(),
+      recipe_copy: recipeCopy,
       status,
       platforms,
       date: String(row.date || '').trim(),
