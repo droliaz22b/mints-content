@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
 import { aiChat } from '../lib/ai'
 import { preprocessToMarkdown, FORMAT_SYSTEM_PROMPT } from '../lib/formatRecipe'
+import { normalizeTagList } from '../lib/tagNormalize'
 import type { Recipe, RecipeStatus } from '../types'
 import { Save, X, AlertCircle, Loader2, Hash, Bold, List, ListOrdered, Heading2, Minus, Sparkles } from 'lucide-react'
 
@@ -184,14 +185,15 @@ Example output: paneer, onion, capsicum, maida`,
     setSaving(true)
     setError('')
     try {
+      const payload = { ...form, tags: normalizeTagList(form.tags) }
       if (isEdit) {
-        await pb.collection('recipes').update(id!, form)
+        await pb.collection('recipes').update(id!, payload)
       } else {
-        await pb.collection('recipes').create(form)
+        await pb.collection('recipes').create(payload)
       }
       // Sync any new tags to the tags collection so they appear in dashboard filters
       const knownLower = new Set(allTags.map(t => t.toLowerCase()))
-      const newTags = form.tags.filter(t => !knownLower.has(t.toLowerCase()))
+      const newTags = payload.tags.filter(t => !knownLower.has(t.toLowerCase()))
       await Promise.allSettled(newTags.map(t => pb.collection('tags').create({ name: t })))
       navigate('/')
     } catch (err: unknown) {

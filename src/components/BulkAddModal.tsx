@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { pb } from '../lib/pocketbase'
+import { normalizeTagList } from '../lib/tagNormalize'
 import type { RecipeStatus } from '../types'
 import { X, Upload, AlertCircle, CheckCircle2, FileUp } from 'lucide-react'
 
@@ -113,6 +114,7 @@ export default function BulkAddModal({ open, onClose, onDone }: Props) {
     let tags: string[] = []
     if (Array.isArray(rawTags)) tags = rawTags.map(String)
     else if (typeof rawTags === 'string' && rawTags.trim()) tags = rawTags.split(/[,;]/).map(t => t.trim()).filter(Boolean)
+    tags = normalizeTagList(tags)
 
     const rawPlatforms = row.platforms
     let platforms: string[] = []

@@ -1,5 +1,6 @@
 import { pb } from './pocketbase'
 import { aiChat } from './ai'
+import { normalizeTagList } from './tagNormalize'
 
 // ─── Shared recipe-import logic (used by Import Docs + Review Later) ───────────
 
@@ -68,7 +69,7 @@ export async function attachToRecipe(
   const current = await pb.collection('recipes').getOne(recipeId, { fields: 'tags' })
   const existing = Array.isArray(current.tags) ? current.tags as string[] : []
   const existingLower = new Set(existing.map(t => t.toLowerCase()))
-  const newTags = aiTags.filter(t => !existingLower.has(t.toLowerCase()))
+  const newTags = normalizeTagList(aiTags).filter(t => !existingLower.has(t.toLowerCase()))
 
   for (const tag of newTags) {
     if (knownTags && knownTags.has(tag.toLowerCase())) continue

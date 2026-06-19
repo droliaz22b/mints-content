@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
 import { formatRecipeWithAI, recipeHasText, saveReviewItem } from '../lib/recipeImport'
+import { normalizeTagList } from '../lib/tagNormalize'
 import {
   Upload, FileText, CheckCircle, XCircle, Loader2,
   AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, FolderOpen, Zap,
@@ -134,7 +135,7 @@ export default function RecipeImport() {
     formatted: string, knownTags: Set<string>
   ) {
     const existingLower = new Set(existingTags.map((t: string) => t.toLowerCase()))
-    const newTags = aiTags.filter(t => !existingLower.has(t))
+    const newTags = normalizeTagList(aiTags).filter(t => !existingLower.has(t.toLowerCase()))
     const mergedTags = [...existingTags, ...newTags]
     for (const tag of newTags) {
       if (!knownTags.has(tag.toLowerCase())) {
