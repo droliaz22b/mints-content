@@ -31,6 +31,47 @@ export async function loadCategoryTaxonomy(): Promise<CategoryTaxonomy> {
   return [...map.entries()].map(([group, items]) => ({ group, items }))
 }
 
+// Classify a recipe into categories ONLY (no formatting). Uses the recipe text
+// when available, otherwise infers conservatively from the name. Returns
+// validated category names from the taxonomy (empty when nothing clearly fits).
+export async function classifyRecipeCategories(
+  recipeName: string, recipeText: string, taxonomy: CategoryTaxonomy
+): Promise<string[]> {
+  if (!taxonomy.length) return []
+  const list = taxonomy.map(g => `${g.group}: ${g.items.join(', ')}`).join('\n')
+  const hasText = recipeText.trim().length > 0
+  const system = `You are a recipe categorizer for Mints Recipes. Choose the categories that CLEARLY apply, ONLY from the allowed list.
+- Be conservative — it is far better to leave a category out than to guess. Do NOT false-flag.
+- Use the EXACT category names from the list. Never invent new ones.
+- Occasion/Festival and Season/Weather: include ONLY if the recipe is explicitly for that.
+${hasText ? '' : '- No recipe text is provided, so infer ONLY what is obvious from the name (usually the dish type, and cuisine if clearly implied). Leave everything uncertain out.\n'}- An empty list is correct when nothing clearly applies.
+
+ALLOWED CATEGORIES (group: options):
+${list}
+
+Return ONLY JSON: { "categories": ["Exact Category Name"] }`
+
+  const user = hasText
+    ? `Recipe name: "${recipeName}"\n\n${recipeText}`
+    : `Recipe name: "${recipeName}" (no recipe text available)`
+
+  const data = await aiChat({
+    response_format: { type: 'json_object' },
+    messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+  })
+  const parsed = JSON.parse(data.choices[0].message.content.trim())
+  const allowed = new Map(taxonomy.flatMap(g => g.items).map(n => [n.toLowerCase(), n]))
+  const out: string[] = []
+  const seen = new Set<string>()
+  if (Array.isArray(parsed.categories)) {
+    for (const c of parsed.categories) {
+      const canon = allowed.get(String(c).trim().toLowerCase())
+      if (canon && !seen.has(canon)) { seen.add(canon); out.push(canon) }
+    }
+  }
+  return out
+}
+
 const FORMAT_BASE = `You are a recipe editor. Given raw recipe text, return JSON.
 
 1. FORMAT the recipe into clean markdown:

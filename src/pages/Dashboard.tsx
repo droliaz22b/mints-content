@@ -5,6 +5,7 @@ import { pb } from '../lib/pocketbase'
 import { preprocessToMarkdown } from '../lib/formatRecipe'
 import { generateCaption, type CaptionPlatform } from '../lib/caption'
 import { groupCategories, type CategoryGroup } from '../lib/categories'
+import { classifyRecipeCategories, loadCategoryTaxonomy } from '../lib/recipeImport'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import ThumbnailStudioModal from '../components/ThumbnailStudioModal'
@@ -76,6 +77,8 @@ export default function Dashboard() {
   const [allCategories, setAllCategories] = useState<string[]>([])
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([])
   const [activeGroup, setActiveGroup] = useState('')
+  const [categorizing, setCategorizing] = useState(false)
+  const [catProgress, setCatProgress] = useState('')
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
 
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
@@ -202,6 +205,40 @@ export default function Dashboard() {
     }
     setSelected(new Set())
     fetchRecipes()
+  }
+
+  // AI auto-categorize the selected recipes (name + text), merging without clobbering.
+  async function bulkAutoCategorize() {
+    const targets = recipes.filter(r => selected.has(r.id))
+    if (!targets.length) return
+    setCategorizing(true); setCatProgress('Loading taxonomy…')
+    let done = 0, updated = 0
+    try {
+      const taxonomy = await loadCategoryTaxonomy()
+      for (const r of targets) {
+        done++
+        setCatProgress(`Categorizing ${done}/${targets.length}…`)
+        try {
+          const ai = await classifyRecipeCategories(r.recipe_name, r.recipe_copy || '', taxonomy)
+          if (!ai.length) continue
+          const existing = Array.isArray(r.categories) ? r.categories : []
+          const lower = new Set(existing.map(c => c.toLowerCase()))
+          const merged = [...existing, ...ai.filter(c => !lower.has(c.toLowerCase()))]
+          if (merged.length !== existing.length) {
+            await pb.collection('recipes').update(r.id, { categories: merged })
+            updated++
+          }
+        } catch { /* skip this one */ }
+      }
+      setCatProgress(`Done — ${updated} of ${targets.length} updated`)
+    } catch {
+      setCatProgress('Failed to load taxonomy')
+    } finally {
+      setCategorizing(false)
+      setSelected(new Set())
+      fetchRecipes()
+      setTimeout(() => setCatProgress(''), 4000)
+    }
   }
 
   function exportCSV() {
@@ -477,9 +514,18 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {catProgress && <span className="text-xs text-gray-500 flex items-center gap-1.5">{categorizing && <Loader2 size={12} className="animate-spin" />}{catProgress}</span>}
           {selected.size > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-gray-600">{selected.size} sel.</span>
+              <button
+                onClick={bulkAutoCategorize}
+                disabled={categorizing}
+                className="flex items-center gap-1.5 text-sm border border-gray-200 rounded-lg px-2.5 py-1 hover:bg-gray-50 disabled:opacity-50"
+                title="AI auto-categorize the selected recipes"
+              >
+                {categorizing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Auto-categorize
+              </button>
               <select
                 onChange={e => { if (e.target.value) bulkUpdateStatus(e.target.value as RecipeStatus) }}
                 className="text-sm border border-gray-200 rounded-lg px-2 py-1 bg-white"
