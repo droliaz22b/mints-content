@@ -108,13 +108,20 @@ export default function PhotoAudit() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Pick one range folder (e.g. “401-600”); it cross-tallies that slice of recipes against the folders inside and flags mismatches.</p>
         </div>
-        {phase === 'ready' && (
+        {supportsFolderPicker() && phase !== 'loading' && (
           <div className="flex items-center gap-2">
-            <button onClick={downloadCsv} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
-              <Download size={14} /> Export CSV
-            </button>
-            <button onClick={() => getStoredRoot().then(r => r && run(r))} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
-              <RefreshCw size={14} /> Re-scan
+            {phase === 'ready' && (
+              <>
+                <button onClick={downloadCsv} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <Download size={14} /> Export CSV
+                </button>
+                <button onClick={() => getStoredRoot().then(r => r && run(r))} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <RefreshCw size={14} /> Re-scan
+                </button>
+              </>
+            )}
+            <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800">
+              <FolderOpen size={14} /> Choose folder
             </button>
           </div>
         )}
