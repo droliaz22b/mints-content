@@ -220,14 +220,10 @@ export default function Dashboard() {
         setCatProgress(`Categorizing ${done}/${targets.length}…`)
         try {
           const ai = await classifyRecipeCategories(r.recipe_name, r.recipe_copy || '', taxonomy)
-          if (!ai.length) continue
-          const existing = Array.isArray(r.categories) ? r.categories : []
-          const lower = new Set(existing.map(c => c.toLowerCase()))
-          const merged = [...existing, ...ai.filter(c => !lower.has(c.toLowerCase()))]
-          if (merged.length !== existing.length) {
-            await pb.collection('recipes').update(r.id, { categories: merged })
-            updated++
-          }
+          if (!ai.length) continue // keep existing rather than wiping when unsure
+          // Replace with the fresh AI result so re-runs correct earlier mistakes.
+          await pb.collection('recipes').update(r.id, { categories: ai })
+          updated++
         } catch { /* skip this one */ }
       }
       setCatProgress(`Done — ${updated} of ${targets.length} updated`)

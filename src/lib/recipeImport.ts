@@ -31,6 +31,16 @@ export async function loadCategoryTaxonomy(): Promise<CategoryTaxonomy> {
   return [...map.entries()].map(([group, items]) => ({ group, items }))
 }
 
+// Strict disambiguation rules shared by import-time and on-demand categorization.
+const CATEGORY_RULES = `Hard rules (accuracy matters more than completeness — never assign a category that doesn't clearly fit):
+- DISH TYPE: pick the ONE that best describes the finished dish. A cake / pastry / sweet / dessert = "Desserts & Sweets"; a drink = "Beverages & Drinks".
+- "Beverages & Drinks" is ONLY for things you DRINK (juice, smoothie, lassi, shake, milkshake, tea, coffee, mocktail). A solid food, cake, pastry, snack or sweet is NEVER "Beverages & Drinks", even if it contains milk, syrup or fruit.
+- COOKING METHOD: read the METHOD steps and assign one ONLY if clearly used — oven / "bake" / "preheat and bake" → "Baked"; "air fryer" → "Air Fryer"; pressure cooker / instant pot → "Pressure Cooker / Instant Pot"; "microwave" → "Microwave"; "slow cooker" → "Slow Cooker"; no cooking at all / set in fridge / only mixing → "No-Cook / No-Bake". If it is deep-fried, pan-fried, boiled or steamed, assign NONE of the method categories.
+- CUISINE / REGION: only when clearly identifiable.
+- DIETARY: "Vegetarian" when there is no meat/fish/egg; "Vegan" only when also no dairy/honey.
+- OCCASION / FESTIVAL and SEASON / WEATHER: include ONLY if the recipe is explicitly for that occasion/season.
+- Use the EXACT category names from the list. Never invent names. An empty list is correct when nothing clearly applies.`
+
 // Classify a recipe into categories ONLY (no formatting). Uses the recipe text
 // when available, otherwise infers conservatively from the name. Returns
 // validated category names from the taxonomy (empty when nothing clearly fits).
@@ -40,22 +50,23 @@ export async function classifyRecipeCategories(
   if (!taxonomy.length) return []
   const list = taxonomy.map(g => `${g.group}: ${g.items.join(', ')}`).join('\n')
   const hasText = recipeText.trim().length > 0
-  const system = `You are a recipe categorizer for Mints Recipes. Choose the categories that CLEARLY apply, ONLY from the allowed list.
-- Be conservative — it is far better to leave a category out than to guess. Do NOT false-flag.
-- Use the EXACT category names from the list. Never invent new ones.
-- Occasion/Festival and Season/Weather: include ONLY if the recipe is explicitly for that.
-${hasText ? '' : '- No recipe text is provided, so infer ONLY what is obvious from the name (usually the dish type, and cuisine if clearly implied). Leave everything uncertain out.\n'}- An empty list is correct when nothing clearly applies.
+  const system = `You are an expert recipe categorizer for Mints Recipes. Choose categories ONLY from the allowed list.
+${CATEGORY_RULES}
+${hasText ? '' : 'No recipe text is provided — infer ONLY the obvious dish type (and cuisine if obvious) from the name; leave cooking method, dietary, occasion and season empty unless certain.\n'}
+Worked example: "Mango Suji Pastry" whose method bakes a semolina batter into a cake and layers it with whipped cream and mango → ["Desserts & Sweets", "Baked", "Vegetarian"]. It is NOT "Beverages & Drinks".
 
 ALLOWED CATEGORIES (group: options):
 ${list}
 
-Return ONLY JSON: { "categories": ["Exact Category Name"] }`
+First reason briefly, then output JSON: { "reasoning": "<1-2 short sentences>", "categories": ["Exact Category Name"] }`
 
   const user = hasText
     ? `Recipe name: "${recipeName}"\n\n${recipeText}`
     : `Recipe name: "${recipeName}" (no recipe text available)`
 
   const data = await aiChat({
+    model: 'gpt-4o',
+    temperature: 0.1,
     response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
   })
@@ -105,10 +116,7 @@ ${FORMAT_RULES}`
   return `${FORMAT_BASE}
 
 3. CATEGORIZE: choose the categories that CLEARLY apply, ONLY from the allowed list below.
-- Be conservative — it is far better to leave a category out than to guess. Do not "false flag".
-- Use the EXACT category names from the list. Never invent new ones.
-- Occasion/Festival and Season/Weather: include ONLY if the recipe is explicitly for that (e.g. mentions Navratri/fasting, Diwali, summer cooler). Otherwise leave them out.
-- It is fine to return an empty list if nothing is clearly applicable.
+${CATEGORY_RULES}
 
 ALLOWED CATEGORIES (group: options):
 ${list}
