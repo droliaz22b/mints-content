@@ -46,7 +46,23 @@ const AMBIGUOUS_MARGIN = 20 // best beats runner-up by less than this → ambigu
 
 interface Scored { folder: SubFolder; mc: MatchComponents }
 
-export function reconcile(recipes: AuditRecipe[], folders: SubFolder[]): AuditResult {
+// Parse a numeric sl_no range from a range-folder name, e.g. "401-600", "1 - 200".
+// Returns null for non-numeric ranges like "A01 - A100" or "01 Thumbnails Mints Old".
+export function parseRange(folderName: string): { min: number; max: number } | null {
+  const m = folderName.match(/^\s*(\d{1,5})\s*[-–—]\s*(\d{1,5})\s*$/)
+  if (!m) return null
+  const a = Number(m[1]); const b = Number(m[2])
+  return { min: Math.min(a, b), max: Math.max(a, b) }
+}
+
+export interface ReconcileOptions {
+  // When false, recipes with no matching folder are omitted (folder-centric audit
+  // for non-numeric ranges where we can't tell which recipes belong).
+  includeMissing?: boolean
+}
+
+export function reconcile(recipes: AuditRecipe[], folders: SubFolder[], opts: ReconcileOptions = {}): AuditResult {
+  const includeMissing = opts.includeMissing ?? true
   // 1. best + runner-up folder for each recipe
   const ranked = recipes.map(recipe => {
     let best: Scored | null = null
@@ -110,6 +126,10 @@ export function reconcile(recipes: AuditRecipe[], folders: SubFolder[]): AuditRe
     return { recipe, status, folderName, imageCount, match: mc, runnerUp, note }
   })
 
+  // For non-numeric ranges we can't tell which recipes belong here, so don't
+  // report every out-of-scope recipe as "missing" — keep only the matched ones.
+  const reportedRows = includeMissing ? rows : rows.filter(r => r.status !== 'missing')
+
   // 4. orphan folders — not the accepted best of any recipe
   const used = new Set(rows.filter(r => r.folderName).map(r => r.folderName as string))
   const orphans: OrphanFolder[] = []
@@ -128,11 +148,11 @@ export function reconcile(recipes: AuditRecipe[], folders: SubFolder[]): AuditRe
   // 5. tallies
   const counts: StatusCounts = {
     ok: 0, name_mismatch: 0, number_mismatch: 0, ambiguous: 0, conflict: 0, no_images: 0, missing: 0,
-    total: rows.length, orphans: orphans.length,
+    total: reportedRows.length, orphans: orphans.length,
   }
-  for (const r of rows) counts[r.status]++
+  for (const r of reportedRows) counts[r.status]++
 
-  return { rows, orphans, counts }
+  return { rows: reportedRows, orphans, counts }
 }
 
 export const STATUS_LABELS: Record<AuditStatus, string> = {

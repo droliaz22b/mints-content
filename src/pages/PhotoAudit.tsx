@@ -4,7 +4,7 @@ import {
   supportsFolderPicker, pickRootFolder, getStoredRoot, clearRootFolder, listSubfolders,
 } from '../lib/thumbnailFolder'
 import {
-  reconcile, auditToCsv, STATUS_LABELS,
+  reconcile, auditToCsv, parseRange, STATUS_LABELS,
   type AuditResult, type AuditRecipe, type AuditStatus,
 } from '../lib/thumbnailAudit'
 import {
@@ -33,6 +33,7 @@ export default function PhotoAudit() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<AuditResult | null>(null)
   const [filter, setFilter] = useState<AuditStatus | 'orphan' | 'all'>('all')
+  const [scope, setScope] = useState('') // human description of what was audited
 
   const run = useCallback(async (root: FileSystemDirectoryHandle) => {
     setPhase('loading'); setError(''); setFilter('all')
@@ -46,7 +47,16 @@ export default function PhotoAudit() {
       const folders = await listSubfolders(root)
 
       setStatus('Cross-tallying…')
-      setResult(reconcile(recipes, folders))
+      // Picked folder is a range like "401-600": audit only that slice of recipes.
+      const range = parseRange(root.name)
+      if (range) {
+        const slice = recipes.filter(r => r.sl_no >= range.min && r.sl_no <= range.max)
+        setScope(`Folder “${root.name}” · recipes ${range.min}–${range.max} (${slice.length} in database)`)
+        setResult(reconcile(slice, folders, { includeMissing: true }))
+      } else {
+        setScope(`Folder “${root.name}” · no numeric range — matching folders to recipes by name only`)
+        setResult(reconcile(recipes, folders, { includeMissing: false }))
+      }
       setPhase('ready'); setStatus('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not run the audit.')
@@ -96,7 +106,7 @@ export default function PhotoAudit() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
             <FolderSearch size={20} className="text-amber-500" /> Photo Folder Audit
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Cross-tally the recipe database against your image folders and flag mismatches to rectify.</p>
+          <p className="text-sm text-gray-500 mt-0.5">Pick one range folder (e.g. “401-600”); it cross-tallies that slice of recipes against the folders inside and flags mismatches.</p>
         </div>
         {phase === 'ready' && (
           <div className="flex items-center gap-2">
@@ -119,8 +129,8 @@ export default function PhotoAudit() {
       {(phase === 'need-folder' || phase === 'error') && supportsFolderPicker() && (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
           <FolderOpen size={28} className="mx-auto mb-3 text-gray-400" />
-          <p className="text-sm text-gray-600 mb-1">Choose your thumbnail photos root folder.</p>
-          <p className="text-xs text-gray-400 mb-4">The parent folder that holds one sub-folder per recipe.</p>
+          <p className="text-sm text-gray-600 mb-1">Choose a range folder to audit.</p>
+          <p className="text-xs text-gray-400 mb-4">Pick one numbered range (e.g. “401-600”) that holds one sub-folder per recipe.</p>
           <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800">
             <FolderOpen size={15} /> Select folder
           </button>
@@ -136,6 +146,7 @@ export default function PhotoAudit() {
 
       {phase === 'ready' && c && (
         <>
+          {scope && <p className="text-xs text-gray-500 mb-3 flex items-center gap-1.5"><FolderOpen size={13} className="text-gray-400" /> {scope}</p>}
           {/* Summary banner */}
           <div className={`flex items-center gap-2 text-sm rounded-lg px-4 py-3 mb-4 border ${problems === 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
             {problems === 0
