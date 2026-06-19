@@ -82,7 +82,8 @@ export interface ThumbnailOptions {
   size1?: number // desired/max px for line 1 (auto-shrinks only if it overflows width)
   size2?: number // desired/max px for line 2
   bannerWidth?: number // cream banner width in px (centred horizontally)
-  bannerExtraHeight?: number // extra px added to banner height; text stays vertically centred
+  paddingY?: number // cream border above/below the text (px)
+  lineGap?: number // vertical space between line 1 and line 2 (px; can be negative to tighten)
 }
 
 export const DEFAULT_FONT_SIZE = 150
@@ -92,7 +93,14 @@ export const MAX_FONT_SIZE = 240
 export const DEFAULT_BANNER_WIDTH = THUMB_W - 96 // 984 — matches the original full-width banner
 export const MIN_BANNER_WIDTH = 480
 export const MAX_BANNER_WIDTH = THUMB_W - 16 // 1064
-export const MAX_BANNER_EXTRA_HEIGHT = 500
+
+export const DEFAULT_PADDING_Y = 36
+export const MIN_PADDING_Y = 8
+export const MAX_PADDING_Y = 140
+
+export const DEFAULT_LINE_GAP = 0
+export const MIN_LINE_GAP = -80
+export const MAX_LINE_GAP = 160
 
 // Compose a 1080x1920 thumbnail: cover-fit photo + cream banner + two-tone title.
 export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
@@ -120,13 +128,14 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
     const bx = (THUMB_W - bw) / 2 // centred horizontally
     const by = margin
     const maxTextW = bw - 80
-    const padY = 44
-    const gap = line1 && line2 ? 8 : 0
+    const padY = opts.paddingY ?? DEFAULT_PADDING_Y
+    const lineGap = line1 && line2 ? (opts.lineGap ?? DEFAULT_LINE_GAP) : 0
 
     const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, opts.size1 ?? DEFAULT_FONT_SIZE) : 0
     const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, opts.size2 ?? DEFAULT_FONT_SIZE) : 0
-    const extraH = Math.max(0, opts.bannerExtraHeight ?? 0)
-    const bh = padY * 2 + s1 + s2 + gap + extraH
+
+    // Box hugs the text: height = top/bottom padding + both lines + the gap between them.
+    const bh = padY * 2 + s1 + s2 + lineGap
 
     // cream banner with soft shadow
     ctx.save()
@@ -141,17 +150,17 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'alphabetic'
     const cx = THUMB_W / 2
-    let cy = by + padY + extraH / 2 // centre the text block vertically in the banner
+    let cy = by + padY
 
     if (line1) {
-      cy += s1 * 0.8
+      cy += s1 * 0.78
       ctx.font = `400 ${s1}px MintsBrushBold`
       ctx.fillStyle = opts.color1
       ctx.fillText(line1, cx, cy)
-      cy += s1 * 0.2 + gap
+      cy += s1 * 0.22 + lineGap
     }
     if (line2) {
-      cy += s2 * 0.8
+      cy += s2 * 0.78
       ctx.font = `400 ${s2}px MintsBrushScript`
       ctx.fillStyle = opts.color2
       ctx.fillText(line2, cx, cy)

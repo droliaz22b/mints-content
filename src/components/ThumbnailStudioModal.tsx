@@ -9,7 +9,9 @@ import {
   pickBestImage, composeThumbnail, defaultTitleLines,
   DEFAULT_COLOR_1, DEFAULT_COLOR_2,
   DEFAULT_FONT_SIZE, MIN_FONT_SIZE, MAX_FONT_SIZE,
-  DEFAULT_BANNER_WIDTH, MIN_BANNER_WIDTH, MAX_BANNER_WIDTH, MAX_BANNER_EXTRA_HEIGHT,
+  DEFAULT_BANNER_WIDTH, MIN_BANNER_WIDTH, MAX_BANNER_WIDTH,
+  DEFAULT_PADDING_Y, MIN_PADDING_Y, MAX_PADDING_Y,
+  DEFAULT_LINE_GAP, MIN_LINE_GAP, MAX_LINE_GAP,
 } from '../lib/thumbnailImage'
 
 interface LoadedImage { name: string; file: File; dataUrl: string }
@@ -32,7 +34,8 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
   const [size1, setSize1] = useState(DEFAULT_FONT_SIZE)
   const [size2, setSize2] = useState(DEFAULT_FONT_SIZE)
   const [bannerWidth, setBannerWidth] = useState(DEFAULT_BANNER_WIDTH)
-  const [bannerExtraHeight, setBannerExtraHeight] = useState(0)
+  const [paddingY, setPaddingY] = useState(DEFAULT_PADDING_Y)
+  const [lineGap, setLineGap] = useState(DEFAULT_LINE_GAP)
 
   const [previewUrl, setPreviewUrl] = useState('')
   const [composing, setComposing] = useState(false)
@@ -123,7 +126,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
     const t = setTimeout(async () => {
       setComposing(true)
       try {
-        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2, size1, size2, bannerWidth, bannerExtraHeight })
+        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2, size1, size2, bannerWidth, paddingY, lineGap })
         if (cancelled) return
         blobRef.current = blob
         setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
@@ -134,7 +137,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
       }
     }, 250)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [phase, images, selected, line1, line2, color1, color2, size1, size2, bannerWidth, bannerExtraHeight])
+  }, [phase, images, selected, line1, line2, color1, color2, size1, size2, bannerWidth, paddingY, lineGap])
 
   // cleanup object URL on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
@@ -228,25 +231,30 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
                   </div>
                 </div>
 
-                {/* Banner (background) size */}
+                {/* Banner (background) box */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Banner</label>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Banner box</label>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-gray-400 w-12 flex-shrink-0">Width</span>
+                    <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">Width</span>
                     <input type="range" min={MIN_BANNER_WIDTH} max={MAX_BANNER_WIDTH} step={8} value={bannerWidth} onChange={e => setBannerWidth(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
                     <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{bannerWidth}</span>
                   </div>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[11px] text-gray-400 w-12 flex-shrink-0">Height</span>
-                    <input type="range" min={0} max={MAX_BANNER_EXTRA_HEIGHT} step={8} value={bannerExtraHeight} onChange={e => setBannerExtraHeight(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
-                    <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{bannerExtraHeight}</span>
+                    <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">Padding</span>
+                    <input type="range" min={MIN_PADDING_Y} max={MAX_PADDING_Y} step={2} value={paddingY} onChange={e => setPaddingY(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{paddingY}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-gray-400 w-16 flex-shrink-0">Line gap</span>
+                    <input type="range" min={MIN_LINE_GAP} max={MAX_LINE_GAP} step={2} value={lineGap} onChange={e => setLineGap(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{lineGap}</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setBannerWidth(DEFAULT_BANNER_WIDTH); setBannerExtraHeight(0) }}
+                    onClick={() => { setBannerWidth(DEFAULT_BANNER_WIDTH); setPaddingY(DEFAULT_PADDING_Y); setLineGap(DEFAULT_LINE_GAP) }}
                     className="text-[11px] text-gray-400 hover:text-gray-700 mt-1.5"
                   >
-                    Reset banner size
+                    Reset banner box
                   </button>
                 </div>
 
