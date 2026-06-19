@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import { pb } from '../lib/pocketbase'
 import { useSettings, type SiteSettings } from '../context/SettingsContext'
 import { getAiKeyStatus, setAiKey } from '../lib/ai'
-import { Save, Loader2, AlertCircle, CheckCircle2, Upload, X, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { DEFAULT_CAPTION_PROMPT } from '../lib/caption'
+import { Save, Loader2, AlertCircle, CheckCircle2, Upload, X, KeyRound, Eye, EyeOff, RotateCcw, MessageSquareText } from 'lucide-react'
 
 function fileUrl(record: { collectionId: string; id: string }, name: string) {
   return name ? `${pb.baseUrl}/api/files/${record.collectionId}/${record.id}/${name}` : ''
@@ -14,6 +15,7 @@ export default function SiteSettings() {
   const [siteTitle, setSiteTitle] = useState('')
   const [tagline, setTagline] = useState('')
   const [description, setDescription] = useState('')
+  const [captionPrompt, setCaptionPrompt] = useState('')
 
   const [faviconFile, setFaviconFile] = useState<File | null>(null)
   const [faviconPreview, setFaviconPreview] = useState('')
@@ -32,6 +34,7 @@ export default function SiteSettings() {
     setSiteTitle(settings.site_title || '')
     setTagline(settings.tagline || '')
     setDescription(settings.description || '')
+    setCaptionPrompt(settings.caption_prompt || '')
     if (settings.favicon) setFaviconPreview(fileUrl(settings, settings.favicon))
     if (settings.logo) setLogoPreview(fileUrl(settings, settings.logo))
   }, [settings])
@@ -50,6 +53,7 @@ export default function SiteSettings() {
       data.append('site_title', siteTitle)
       data.append('tagline', tagline)
       data.append('description', description)
+      data.append('caption_prompt', captionPrompt)
       if (faviconFile) data.append('favicon', faviconFile)
       if (logoFile) data.append('logo', logoFile)
 
@@ -174,6 +178,34 @@ export default function SiteSettings() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* AI Caption Prompt */}
+        <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+              <MessageSquareText size={13} /> AI Caption Prompt
+            </h2>
+            <button
+              type="button"
+              onClick={() => setCaptionPrompt(DEFAULT_CAPTION_PROMPT)}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700"
+              title="Replace the editor below with the built-in brand prompt"
+            >
+              <RotateCcw size={12} /> Load default
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            This system prompt drives the recipe caption generator. Tweak the brand voice, structure,
+            hashtag rules, or word limit here. Leave blank to use the built-in default.
+          </p>
+          <textarea
+            value={captionPrompt}
+            onChange={e => setCaptionPrompt(e.target.value)}
+            rows={16}
+            className="input resize-y font-mono text-xs leading-relaxed"
+            placeholder="Leave blank to use the built-in Mints Recipes caption prompt…"
+          />
         </section>
 
         <div className="flex items-center gap-3">

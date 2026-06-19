@@ -9,6 +9,7 @@ export interface SiteSettings {
   description: string
   favicon: string
   logo: string
+  caption_prompt: string
 }
 
 interface SettingsContextType {

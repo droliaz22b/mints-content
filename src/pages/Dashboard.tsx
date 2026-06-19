@@ -5,6 +5,7 @@ import { pb } from '../lib/pocketbase'
 import { preprocessToMarkdown } from '../lib/formatRecipe'
 import { generateCaption, type CaptionPlatform } from '../lib/caption'
 import { useAuth } from '../context/AuthContext'
+import { useSettings } from '../context/SettingsContext'
 import ThumbnailStudioModal from '../components/ThumbnailStudioModal'
 import type { Recipe, RecipeStatus } from '../types'
 import StatusBadge from '../components/StatusBadge'
@@ -856,6 +857,7 @@ function RecipeBody({ markdown }: { markdown: string }) {
 const CAPTION_PLATFORMS: CaptionPlatform[] = ['Facebook', 'Instagram']
 
 function CaptionGenerator({ recipeName, platforms }: { recipeName: string; platforms?: string[] }) {
+  const { settings } = useSettings()
   const preferred = CAPTION_PLATFORMS.find(p => platforms?.includes(p)) || 'Facebook'
   const [platform, setPlatform] = useState<CaptionPlatform>(preferred)
   const [caption, setCaption] = useState('')
@@ -865,7 +867,7 @@ function CaptionGenerator({ recipeName, platforms }: { recipeName: string; platf
   async function generate() {
     setLoading(true); setError('')
     try {
-      setCaption(await generateCaption(recipeName, platform))
+      setCaption(await generateCaption(recipeName, platform, settings?.caption_prompt))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate caption.')
     } finally {

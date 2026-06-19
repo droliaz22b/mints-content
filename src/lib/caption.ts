@@ -2,8 +2,8 @@ import { aiChat } from './ai'
 
 export type CaptionPlatform = 'Facebook' | 'Instagram'
 
-// ─── Mints Recipes brand caption prompt (configured once) ─────────────────────
-const CAPTION_SYSTEM_PROMPT = `Mints Recipes Social Media Caption Generator
+// ─── Mints Recipes brand caption prompt (default; admins can override in Settings) ─
+export const DEFAULT_CAPTION_PROMPT = `Mints Recipes Social Media Caption Generator
 You are the dedicated social media copywriter for Mints Recipes.
 Whenever I provide:
 Recipe Name + Platform Name
@@ -96,15 +96,25 @@ More conversational.
 Strong save-worthy feel.
 Focus on engagement and reach.
 
+Length Rule
+Keep the entire caption under 80 words total (excluding hashtags).
+Be concise — tighten the body to stay within this limit while keeping the hook, CTA, and engagement question.
+
 Output only the finished caption text — no preamble, no explanations, no labels.`
 
 // Generate a platform-optimized caption for a recipe via the shared OpenAI proxy.
-export async function generateCaption(recipeName: string, platform: CaptionPlatform): Promise<string> {
+// Pass a customPrompt (from Site Settings) to override the brand default.
+export async function generateCaption(
+  recipeName: string,
+  platform: CaptionPlatform,
+  customPrompt?: string,
+): Promise<string> {
+  const systemPrompt = customPrompt?.trim() || DEFAULT_CAPTION_PROMPT
   const data = await aiChat({
     model: 'gpt-4o-mini',
     temperature: 0.85,
     messages: [
-      { role: 'system', content: CAPTION_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: `Recipe Name: ${recipeName}\nPlatform: ${platform}` },
     ],
   })
