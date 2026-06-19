@@ -5,12 +5,12 @@
 /* Brush fonts for the 9:16 thumbnail generator (admin feature) */
 @font-face {
   font-family: 'MintsBrushBold';
-  src: url('/fonts/permanent-marker.woff2') format('woff2');
+  src: url('/fonts/handelson-two.otf') format('opentype');
   font-display: swap;
 }
 @font-face {
   font-family: 'MintsBrushScript';
-  src: url('/fonts/yellowtail.woff2') format('woff2');
+  src: url('/fonts/handelson-two.otf') format('opentype');
   font-display: swap;
 }
 
