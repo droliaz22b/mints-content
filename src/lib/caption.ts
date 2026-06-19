@@ -102,6 +102,16 @@ Be concise — tighten the body to stay within this limit while keeping the hook
 
 Output only the finished caption text — no preamble, no explanations, no labels.`
 
+// Hard cap on caption length. The prompt asks for this too, but the model is
+// unreliable about it, so we also enforce it programmatically below.
+export const CAPTION_WORD_LIMIT = 80
+
+// Count words excluding hashtags (e.g. "#MintsRecipes" doesn't count toward the limit).
+export function captionWordCount(text: string): number {
+  const withoutHashtags = text.replace(/#[^\s#]+/g, ' ')
+  return withoutHashtags.trim().split(/\s+/).filter(Boolean).length
+}
+
 // Generate a platform-optimized caption for a recipe via the shared OpenAI proxy.
 // Pass a customPrompt (from Site Settings) to override the brand default.
 export async function generateCaption(
@@ -110,13 +120,40 @@ export async function generateCaption(
   customPrompt?: string,
 ): Promise<string> {
   const systemPrompt = customPrompt?.trim() || DEFAULT_CAPTION_PROMPT
+  const userMsg = `Recipe Name: ${recipeName}\nPlatform: ${platform}`
+
   const data = await aiChat({
     model: 'gpt-4o-mini',
     temperature: 0.85,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Recipe Name: ${recipeName}\nPlatform: ${platform}` },
+      { role: 'user', content: userMsg },
     ],
   })
-  return data.choices[0].message.content.trim()
+  let caption = data.choices[0].message.content.trim()
+
+  // Enforce the word limit: if over, ask the model to compress (up to 2 retries).
+  for (let attempt = 0; attempt < 2 && captionWordCount(caption) > CAPTION_WORD_LIMIT; attempt++) {
+    const retry = await aiChat({
+      model: 'gpt-4o-mini',
+      temperature: 0.5,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: caption },
+        {
+          role: 'user',
+          content:
+            `That caption is ${captionWordCount(caption)} words — too long. ` +
+            `Rewrite it to UNDER ${CAPTION_WORD_LIMIT} words (hashtags don't count). ` +
+            `Keep the Roman Hindi curiosity hook, a very short body, the "Comment RECIPE" CTA, ` +
+            `the closing engagement question, and exactly 5 hashtags at the end. ` +
+            `Output only the finished caption.`,
+        },
+      ],
+    })
+    caption = retry.choices[0].message.content.trim()
+  }
+
+  return caption
 }
