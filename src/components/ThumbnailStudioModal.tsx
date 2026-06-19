@@ -9,6 +9,7 @@ import {
   pickBestImage, composeThumbnail, defaultTitleLines,
   DEFAULT_COLOR_1, DEFAULT_COLOR_2,
   DEFAULT_FONT_SIZE, MIN_FONT_SIZE, MAX_FONT_SIZE,
+  DEFAULT_BANNER_WIDTH, MIN_BANNER_WIDTH, MAX_BANNER_WIDTH, MAX_BANNER_EXTRA_HEIGHT,
 } from '../lib/thumbnailImage'
 
 interface LoadedImage { name: string; file: File; dataUrl: string }
@@ -30,6 +31,8 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
   const [color2, setColor2] = useState(DEFAULT_COLOR_2)
   const [size1, setSize1] = useState(DEFAULT_FONT_SIZE)
   const [size2, setSize2] = useState(DEFAULT_FONT_SIZE)
+  const [bannerWidth, setBannerWidth] = useState(DEFAULT_BANNER_WIDTH)
+  const [bannerExtraHeight, setBannerExtraHeight] = useState(0)
 
   const [previewUrl, setPreviewUrl] = useState('')
   const [composing, setComposing] = useState(false)
@@ -120,7 +123,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
     const t = setTimeout(async () => {
       setComposing(true)
       try {
-        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2, size1, size2 })
+        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2, size1, size2, bannerWidth, bannerExtraHeight })
         if (cancelled) return
         blobRef.current = blob
         setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
@@ -131,7 +134,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
       }
     }, 250)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [phase, images, selected, line1, line2, color1, color2, size1, size2])
+  }, [phase, images, selected, line1, line2, color1, color2, size1, size2, bannerWidth, bannerExtraHeight])
 
   // cleanup object URL on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
@@ -223,6 +226,28 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
                     <input type="range" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step={2} value={size2} onChange={e => setSize2(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
                     <span className="text-[11px] text-gray-500 tabular-nums w-8 text-right flex-shrink-0">{size2}</span>
                   </div>
+                </div>
+
+                {/* Banner (background) size */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Banner</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-400 w-12 flex-shrink-0">Width</span>
+                    <input type="range" min={MIN_BANNER_WIDTH} max={MAX_BANNER_WIDTH} step={8} value={bannerWidth} onChange={e => setBannerWidth(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{bannerWidth}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-gray-400 w-12 flex-shrink-0">Height</span>
+                    <input type="range" min={0} max={MAX_BANNER_EXTRA_HEIGHT} step={8} value={bannerExtraHeight} onChange={e => setBannerExtraHeight(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-9 text-right flex-shrink-0">{bannerExtraHeight}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setBannerWidth(DEFAULT_BANNER_WIDTH); setBannerExtraHeight(0) }}
+                    className="text-[11px] text-gray-400 hover:text-gray-700 mt-1.5"
+                  >
+                    Reset banner size
+                  </button>
                 </div>
 
                 {/* Image grid */}

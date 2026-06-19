@@ -81,11 +81,18 @@ export interface ThumbnailOptions {
   color2: string
   size1?: number // desired/max px for line 1 (auto-shrinks only if it overflows width)
   size2?: number // desired/max px for line 2
+  bannerWidth?: number // cream banner width in px (centred horizontally)
+  bannerExtraHeight?: number // extra px added to banner height; text stays vertically centred
 }
 
 export const DEFAULT_FONT_SIZE = 150
 export const MIN_FONT_SIZE = 40
 export const MAX_FONT_SIZE = 240
+
+export const DEFAULT_BANNER_WIDTH = THUMB_W - 96 // 984 — matches the original full-width banner
+export const MIN_BANNER_WIDTH = 480
+export const MAX_BANNER_WIDTH = THUMB_W - 16 // 1064
+export const MAX_BANNER_EXTRA_HEIGHT = 500
 
 // Compose a 1080x1920 thumbnail: cover-fit photo + cream banner + two-tone title.
 export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
@@ -109,8 +116,8 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
 
   if (line1 || line2) {
     const margin = 48
-    const bx = margin
-    const bw = THUMB_W - margin * 2
+    const bw = opts.bannerWidth ?? DEFAULT_BANNER_WIDTH
+    const bx = (THUMB_W - bw) / 2 // centred horizontally
     const by = margin
     const maxTextW = bw - 80
     const padY = 44
@@ -118,7 +125,8 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
 
     const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, opts.size1 ?? DEFAULT_FONT_SIZE) : 0
     const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, opts.size2 ?? DEFAULT_FONT_SIZE) : 0
-    const bh = padY * 2 + s1 + s2 + gap
+    const extraH = Math.max(0, opts.bannerExtraHeight ?? 0)
+    const bh = padY * 2 + s1 + s2 + gap + extraH
 
     // cream banner with soft shadow
     ctx.save()
@@ -133,7 +141,7 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'alphabetic'
     const cx = THUMB_W / 2
-    let cy = by + padY
+    let cy = by + padY + extraH / 2 // centre the text block vertically in the banner
 
     if (line1) {
       cy += s1 * 0.8
