@@ -8,6 +8,7 @@ import {
 import {
   pickBestImage, composeThumbnail, defaultTitleLines,
   DEFAULT_COLOR_1, DEFAULT_COLOR_2,
+  DEFAULT_FONT_SIZE, MIN_FONT_SIZE, MAX_FONT_SIZE,
 } from '../lib/thumbnailImage'
 
 interface LoadedImage { name: string; file: File; dataUrl: string }
@@ -27,6 +28,8 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
   const [line2, setLine2] = useState(init.line2)
   const [color1, setColor1] = useState(DEFAULT_COLOR_1)
   const [color2, setColor2] = useState(DEFAULT_COLOR_2)
+  const [size1, setSize1] = useState(DEFAULT_FONT_SIZE)
+  const [size2, setSize2] = useState(DEFAULT_FONT_SIZE)
 
   const [previewUrl, setPreviewUrl] = useState('')
   const [composing, setComposing] = useState(false)
@@ -117,7 +120,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
     const t = setTimeout(async () => {
       setComposing(true)
       try {
-        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2 })
+        const blob = await composeThumbnail({ file: images[selected].file, line1, line2, color1, color2, size1, size2 })
         if (cancelled) return
         blobRef.current = blob
         setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
@@ -128,7 +131,7 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
       }
     }, 250)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [phase, images, selected, line1, line2, color1, color2])
+  }, [phase, images, selected, line1, line2, color1, color2, size1, size2])
 
   // cleanup object URL on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
@@ -203,12 +206,22 @@ export default function ThumbnailStudioModal({ recipe, onClose }: { recipe: Reci
                     <input value={line1} onChange={e => setLine1(e.target.value)} className="input flex-1" placeholder="Line 1" />
                     <input type="color" value={color1} onChange={e => setColor1(e.target.value)} className="w-9 h-9 rounded border border-gray-200 cursor-pointer flex-shrink-0" title="Line 1 colour" />
                   </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-gray-400 w-9 flex-shrink-0">Size</span>
+                    <input type="range" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step={2} value={size1} onChange={e => setSize1(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-8 text-right flex-shrink-0">{size1}</span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Title — line 2</label>
                   <div className="flex gap-2">
                     <input value={line2} onChange={e => setLine2(e.target.value)} className="input flex-1" placeholder="Line 2" />
                     <input type="color" value={color2} onChange={e => setColor2(e.target.value)} className="w-9 h-9 rounded border border-gray-200 cursor-pointer flex-shrink-0" title="Line 2 colour" />
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-gray-400 w-9 flex-shrink-0">Size</span>
+                    <input type="range" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step={2} value={size2} onChange={e => setSize2(Number(e.target.value))} className="flex-1 accent-black cursor-pointer" />
+                    <span className="text-[11px] text-gray-500 tabular-nums w-8 text-right flex-shrink-0">{size2}</span>
                   </div>
                 </div>
 

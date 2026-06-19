@@ -79,7 +79,13 @@ export interface ThumbnailOptions {
   line2: string
   color1: string
   color2: string
+  size1?: number // desired/max px for line 1 (auto-shrinks only if it overflows width)
+  size2?: number // desired/max px for line 2
 }
+
+export const DEFAULT_FONT_SIZE = 150
+export const MIN_FONT_SIZE = 40
+export const MAX_FONT_SIZE = 240
 
 // Compose a 1080x1920 thumbnail: cover-fit photo + cream banner + two-tone title.
 export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
@@ -110,8 +116,8 @@ export async function composeThumbnail(opts: ThumbnailOptions): Promise<Blob> {
     const padY = 44
     const gap = line1 && line2 ? 8 : 0
 
-    const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, 150) : 0
-    const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, 150) : 0
+    const s1 = line1 ? fitFontSize(ctx, line1, 'MintsBrushBold', maxTextW, opts.size1 ?? DEFAULT_FONT_SIZE) : 0
+    const s2 = line2 ? fitFontSize(ctx, line2, 'MintsBrushScript', maxTextW, opts.size2 ?? DEFAULT_FONT_SIZE) : 0
     const bh = padY * 2 + s1 + s2 + gap
 
     // cream banner with soft shadow
