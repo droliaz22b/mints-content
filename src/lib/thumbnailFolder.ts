@@ -149,34 +149,54 @@ export async function findRecipeFolder(root: DirHandle, slNo: number, recipeName
   return bestScore >= 40 ? best : null
 }
 
-// List image files in a folder (sorted naturally). getFile() is metadata-only;
-// actual OneDrive hydration happens when the bytes are read (downscale/compose).
-export async function listImages(dir: DirHandle): Promise<FolderImage[]> {
-  const d = dir as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+// Photos sometimes sit directly in the recipe folder and sometimes inside a
+// nested sub-folder, so we walk a few levels deep when collecting/counting.
+const MAX_IMAGE_DEPTH = 4
+
+interface DirLike { values: () => AsyncIterable<FileSystemHandle> }
+
+// Recursively gather image files (depth-limited). Nested files are prefixed with
+// their sub-folder path so names stay unique and sort sensibly.
+async function gatherImages(dir: DirLike, prefix = '', depth = 0): Promise<FolderImage[]> {
   const out: FolderImage[] = []
-  for await (const entry of d.values()) {
+  for await (const entry of dir.values()) {
     if (entry.kind === 'file' && IMAGE_RE.test(entry.name)) {
-      out.push({ name: entry.name, file: await (entry as FileSystemFileHandle).getFile() })
+      out.push({ name: prefix + entry.name, file: await (entry as FileSystemFileHandle).getFile() })
+    } else if (entry.kind === 'directory' && depth < MAX_IMAGE_DEPTH) {
+      out.push(...await gatherImages(entry as unknown as DirLike, `${prefix}${entry.name}/`, depth + 1))
     }
   }
+  return out
+}
+
+async function countImages(dir: DirLike, depth = 0): Promise<number> {
+  let n = 0
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'file' && IMAGE_RE.test(entry.name)) n++
+    else if (entry.kind === 'directory' && depth < MAX_IMAGE_DEPTH) n += await countImages(entry as unknown as DirLike, depth + 1)
+  }
+  return n
+}
+
+// List image files in a folder, including any in nested sub-folders (sorted
+// naturally). getFile() is metadata-only; cloud hydration happens when the
+// bytes are read (downscale/compose).
+export async function listImages(dir: DirHandle): Promise<FolderImage[]> {
+  const out = await gatherImages(dir as unknown as DirLike)
   out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   return out
 }
 
 export interface SubFolder { name: string; imageCount: number }
 
-// Enumerate the root's immediate sub-folders with how many images each contains.
-// Used by the Photo Audit to cross-tally folders against the recipe database.
+// Enumerate the root's immediate sub-folders with how many images each contains
+// (counting nested sub-folders too). Used by the Photo Audit.
 export async function listSubfolders(root: DirHandle): Promise<SubFolder[]> {
-  const r = root as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+  const r = root as unknown as DirLike
   const out: SubFolder[] = []
   for await (const entry of r.values()) {
     if (entry.kind !== 'directory') continue
-    let imageCount = 0
-    const d = entry as unknown as { values: () => AsyncIterable<FileSystemHandle> }
-    for await (const child of d.values()) {
-      if (child.kind === 'file' && IMAGE_RE.test(child.name)) imageCount++
-    }
+    const imageCount = await countImages(entry as unknown as DirLike)
     out.push({ name: entry.name, imageCount })
   }
   out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
