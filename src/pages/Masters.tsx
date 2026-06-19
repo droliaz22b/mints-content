@@ -1,7 +1,10 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { pb } from '../lib/pocketbase'
 import type { Category, Tag } from '../types'
+import { GROUP_ORDER, groupCategories } from '../lib/categories'
 import { Plus, Trash2, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+
+const CATEGORY_GROUPS = [...GROUP_ORDER, 'Other']
 
 export default function Masters() {
   return (
@@ -19,6 +22,7 @@ export default function Masters() {
 function CategoriesSection() {
   const [items, setItems] = useState<Category[]>([])
   const [input, setInput] = useState('')
+  const [group, setGroup] = useState(GROUP_ORDER[1]) // default to Cuisine / Region
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -27,7 +31,7 @@ function CategoriesSection() {
 
   async function load() {
     try {
-      const res = await pb.collection('categories').getFullList<Category>({ sort: 'name' })
+      const res = await pb.collection('categories').getFullList<Category>({ sort: 'group,name' })
       setItems(res)
     } catch { setError('Failed to load categories.') }
     finally { setLoading(false) }
@@ -41,11 +45,17 @@ function CategoriesSection() {
     if (!name) return
     setSaving(true); setError('')
     try {
-      await pb.collection('categories').create({ name })
+      await pb.collection('categories').create({ name, group })
       setInput('')
       await load()
     } catch { setError('Failed to add. Name may already exist.') }
     finally { setSaving(false) }
+  }
+
+  async function changeGroup(id: string, newGroup: string) {
+    setItems(prev => prev.map(c => (c.id === id ? { ...c, group: newGroup } : c))) // optimistic
+    try { await pb.collection('categories').update(id, { group: newGroup }) }
+    catch { setError('Failed to update group.'); await load() }
   }
 
   async function remove(id: string) {
@@ -55,20 +65,25 @@ function CategoriesSection() {
     } catch { setError('Failed to delete.') }
   }
 
+  const grouped = groupCategories(items.map(c => ({ name: c.name, group: c.group })))
+  const byName = new Map(items.map(c => [c.name, c]))
+
   async function syncFromRecipes() {
     setSyncing(true); setError(''); setSyncResult(null)
     try {
-      const recipes = await pb.collection('recipes').getFullList({ fields: 'category' })
+      const recipes = await pb.collection('recipes').getFullList({ fields: 'categories' })
       const found = new Set<string>()
       for (const r of recipes) {
-        if (r.category?.trim()) found.add(r.category.trim())
+        for (const c of (Array.isArray(r.categories) ? r.categories : []) as string[]) {
+          if (c?.trim()) found.add(c.trim())
+        }
       }
       const existing = await pb.collection('categories').getFullList<Category>({ fields: 'name' })
       const existingLower = new Set(existing.map(c => c.name.toLowerCase()))
       const toCreate = [...found].filter(c => !existingLower.has(c.toLowerCase()))
       let created = 0
       for (const name of toCreate) {
-        try { await pb.collection('categories').create({ name }); created++ } catch { /* duplicate */ }
+        try { await pb.collection('categories').create({ name, group: 'Other' }); created++ } catch { /* duplicate */ }
       }
       setSyncResult({ created, total: found.size })
       await load()
@@ -95,22 +110,44 @@ function CategoriesSection() {
           ✓ Done — {syncResult.created} new categories added ({syncResult.total} unique found across all recipes)
         </div>
       )}
-      <form onSubmit={add} className="flex gap-2 mb-4">
+      <form onSubmit={add} className="flex flex-col sm:flex-row gap-2 mb-4">
         <input value={input} onChange={e => setInput(e.target.value)} className="input flex-1" placeholder="New category name…" />
-        <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+        <select value={group} onChange={e => setGroup(e.target.value)} className="input sm:w-52" title="Group">
+          {CATEGORY_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <button type="submit" disabled={saving} className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
         </button>
       </form>
-      {loading ? <Spinner /> : (
-        <ul className="divide-y divide-gray-100">
-          {items.map(c => (
-            <li key={c.id} className="flex items-center justify-between py-2.5">
-              <span className="text-sm">{c.name}</span>
-              <button onClick={() => remove(c.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
-            </li>
+      {loading ? <Spinner /> : items.length === 0 ? (
+        <p className="text-sm text-gray-400 py-3 text-center">No categories yet.</p>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map(({ group: g, items: names }) => (
+            <div key={g}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{g}</p>
+              <ul className="divide-y divide-gray-100">
+                {names.map(name => {
+                  const c = byName.get(name)!
+                  return (
+                    <li key={c.id} className="flex items-center justify-between gap-2 py-2">
+                      <span className="text-sm flex-1 truncate">{c.name}</span>
+                      <select
+                        value={c.group || 'Other'}
+                        onChange={e => changeGroup(c.id, e.target.value)}
+                        className="text-xs border border-gray-200 rounded-md px-1.5 py-1 text-gray-500 outline-none focus:ring-1 focus:ring-black"
+                        title="Move to group"
+                      >
+                        {CATEGORY_GROUPS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                      <button onClick={() => remove(c.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
           ))}
-          {items.length === 0 && <p className="text-sm text-gray-400 py-3 text-center">No categories yet.</p>}
-        </ul>
+        </div>
       )}
     </div>
   )
