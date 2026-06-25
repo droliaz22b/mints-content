@@ -7,3 +7,10 @@ pb/pb_data
 pb/pb_hooks/*
 !pb/pb_hooks/ai.pb.js
 scripts/
+
+# Local-only files (not part of the app)
+.claude/
+CLAUDE.md
+context.txt
+Backup-No upload to git/
+Recipe Doc/
