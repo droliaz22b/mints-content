@@ -30,8 +30,8 @@ export interface ChatCompletion {
 // ─── Model tiers by task intensity ────────────────────────────────────────────
 // Pick a tier at each call site by how much reasoning/accuracy the task needs.
 // Tune the model behind each tier here, in one place.
-//   fast   → high-volume, mechanical work (formatting, tag/ingredient extraction, captions)
-//   smart  → judgement & accuracy (categorization)
+//   fast   → high-volume, mechanical work (captions, lightweight extraction)
+//   smart  → judgement & accuracy (recipe formatting + tagging, categorization)
 //   vision → image understanding (thumbnail best-photo pick)
 export const AI_MODELS = {
   fast: 'gpt-4o-mini',

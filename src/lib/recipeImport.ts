@@ -133,7 +133,7 @@ export async function formatRecipeWithAI(
   rawText: string, recipeName: string, taxonomy?: CategoryTaxonomy
 ): Promise<AiFormatResult> {
   const data = await aiChat({
-    model: AI_MODELS.fast,
+    model: AI_MODELS.smart,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: buildPrompt(taxonomy) },
@@ -227,13 +227,57 @@ export function recipeTokens(name: string): string[] {
     .filter(t => !MATCH_STOPWORDS.has(t))  // drop filler words
 }
 
+// Levenshtein edit distance, bounded by `max` (returns max+1 once exceeded so we
+// can bail early). Cheap because callers pre-gate on length and first character.
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  let curr = new Array<number>(b.length + 1)
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i
+    let rowMin = curr[0]
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+      if (curr[j] < rowMin) rowMin = curr[j]
+    }
+    if (rowMin > max) return max + 1   // whole row already over budget → bail
+    ;[prev, curr] = [curr, prev]
+  }
+  return prev[b.length]
+}
+
+// Typo-tolerant token equality. Exact tokens always match; otherwise we allow a
+// small edit distance, but only for longer tokens that share a first letter, so
+// short words ("dal"/"dahi", "rice"/"nice") still require an exact match.
+function fuzzyEq(a: string, b: string): boolean {
+  if (a === b) return true
+  if (a.length < 4 || b.length < 4) return false
+  if (a[0] !== b[0]) return false
+  const max = Math.max(a.length, b.length) >= 8 ? 2 : 1
+  return editDistance(a, b, max) <= max
+}
+
+// Count fuzzy-matched tokens between two sets with greedy one-to-one pairing, so
+// a single token can't be credited against several near-spellings.
+function fuzzyIntersection(a: string[], b: string[]): number {
+  const used = new Array(b.length).fill(false)
+  let inter = 0
+  for (const t of a) {
+    for (let j = 0; j < b.length; j++) {
+      if (!used[j] && fuzzyEq(t, b[j])) { used[j] = true; inter++; break }
+    }
+  }
+  return inter
+}
+
 // Sørensen–Dice overlap of two token sets → 1.0 when the sets are identical.
+// Tokens that differ only by a small typo still count toward the overlap.
 function diceScore(a: string[], b: string[]): number {
   if (!a.length || !b.length) return 0
-  const sa = new Set(a), sb = new Set(b)
-  let inter = 0
-  for (const t of sa) if (sb.has(t)) inter++
-  return (2 * inter) / (sa.size + sb.size)
+  const sa = [...new Set(a)], sb = [...new Set(b)]
+  const inter = fuzzyIntersection(sa, sb)
+  return (2 * inter) / (sa.length + sb.length)
 }
 
 export interface RecipeIndexEntry {
@@ -273,14 +317,15 @@ const AUTO_MATCH_SCORE = 0.72  // best must reach this to auto-import
 const AUTO_MATCH_MARGIN = 0.25 // …and lead the runner-up by this much (so duplicates stay ambiguous)
 const MAX_CANDIDATES = 6
 
-// Fraction of `a`'s distinct tokens that also appear in `b` (directional coverage).
+// Fraction of `a`'s distinct tokens that also appear in `b` (directional
+// coverage). Typo-tolerant: a token counts as present on a small-edit match.
 function coverage(a: string[], b: string[]): number {
-  const sa = new Set(a)
-  if (!sa.size) return 0
-  const sb = new Set(b)
+  const sa = [...new Set(a)]
+  if (!sa.length) return 0
+  const sb = [...new Set(b)]
   let hit = 0
-  for (const t of sa) if (sb.has(t)) hit++
-  return hit / sa.size
+  for (const t of sa) if (sb.some(x => fuzzyEq(t, x))) hit++
+  return hit / sa.length
 }
 
 // Rank a filename against the recipe index. Returns the plausible candidates
