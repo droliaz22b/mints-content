@@ -306,10 +306,11 @@ export async function loadRecipeIndex(): Promise<RecipeIndexEntry[]> {
 }
 
 export interface MatchResult {
-  candidates: Candidate[]   // best-first, score >= MIN_MATCH_SCORE, capped
-  best: Candidate | null    // the top candidate (or null when none)
-  bestScore: number         // similarity of the top candidate (0–1)
-  confident: boolean        // safe to auto-import to `best` without review
+  candidates: Candidate[]    // best-first, score >= MIN_MATCH_SCORE, capped
+  best: Candidate | null     // the top candidate (or null when none)
+  bestScore: number          // similarity of the top candidate (0–1)
+  confident: boolean         // safe to auto-import to `best` without review
+  alreadyImported: boolean   // a recipe with text matches strongly → skip the doc
 }
 
 const MIN_MATCH_SCORE = 0.34   // below this a recipe is not even shown as a candidate
@@ -337,11 +338,19 @@ export function matchFilename(filename: string, index: RecipeIndexEntry[]): Matc
     .filter(s => s.score >= MIN_MATCH_SCORE)
     .sort((a, b) => b.score - a.score)
 
-  const top = scored.slice(0, MAX_CANDIDATES).map(s => ({
-    id: s.entry.id, sl_no: s.entry.sl_no, recipe_name: s.entry.recipe_name, has_text: s.entry.has_text,
-  }))
-  const best = top[0] ?? null
+  // Recipes that already have real text are done — never offer them as
+  // suggestions. `best` still tracks the true top match (text or not) so an
+  // already-imported doc is detected and silently skipped, not re-queued.
+  const candidates = scored
+    .filter(s => !s.entry.has_text)
+    .slice(0, MAX_CANDIDATES)
+    .map(s => ({
+      id: s.entry.id, sl_no: s.entry.sl_no, recipe_name: s.entry.recipe_name, has_text: s.entry.has_text,
+    }))
   const bestEntry = scored[0]
+  const best = bestEntry
+    ? { id: bestEntry.entry.id, sl_no: bestEntry.entry.sl_no, recipe_name: bestEntry.entry.recipe_name, has_text: bestEntry.entry.has_text }
+    : null
   const bestScore = bestEntry?.score ?? 0
   const secondScore = scored[1]?.score ?? 0
   const margin = bestScore - secondScore
@@ -360,7 +369,14 @@ export function matchFilename(filename: string, index: RecipeIndexEntry[]): Matc
     (contained && bestScore >= 0.6 && margin >= 0.12)
   )
 
-  return { candidates: top, best, bestScore, confident }
+  // The doc is "already imported" when a recipe that already has text matches
+  // strongly — re-importing it would duplicate or overwrite existing content, so
+  // skip it. Catches the case where an empty recipe edges out the real (filled)
+  // target on score: scored is sorted, so the first has_text entry is its best.
+  const topTextScore = scored.find(s => s.entry.has_text)?.score ?? 0
+  const alreadyImported = (!!bestEntry && bestEntry.entry.has_text) || topTextScore >= AUTO_MATCH_SCORE
+
+  return { candidates, best, bestScore, confident, alreadyImported }
 }
 
 // ─── Review queue persistence ─────────────────────────────────────────────────

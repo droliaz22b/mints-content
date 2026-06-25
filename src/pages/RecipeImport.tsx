@@ -172,7 +172,18 @@ export default function RecipeImport() {
       }
 
       patch(entry.uid, { phase: 'matching', rawText })
-      const { candidates, best, confident } = matchFilename(entry.file.name, index)
+      const { candidates, best, confident, alreadyImported } = matchFilename(entry.file.name, index)
+
+      // A recipe with text already matches strongly → the doc is already imported.
+      // Leave it untouched and do NOT queue it for review (just report the count).
+      if (alreadyImported) {
+        const target = best && best.has_text ? best : null
+        patch(entry.uid, {
+          phase: 'skipped', rawText, candidates, selectedId: target?.id ?? null,
+          skipNote: target ? `#${target.sl_no} ${target.recipe_name} already has text — left unchanged` : 'Already imported — left unchanged',
+        })
+        alreadyExists++; continue
+      }
 
       // Confident, unambiguous match onto an empty recipe → import right away.
       if (confident && best && !best.has_text) {
@@ -190,13 +201,6 @@ export default function RecipeImport() {
           errors++
         }
         continue
-      }
-
-      // The best-matching recipe already has text → it's already created.
-      // Leave it untouched and do NOT queue it for review (just report the count).
-      if (best && best.has_text) {
-        patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: best.id, skipNote: `#${best.sl_no} ${best.recipe_name} already has text — left unchanged` })
-        alreadyExists++; continue
       }
 
       // No plausible candidate at all → queue for later, no inline clutter.
@@ -251,7 +255,16 @@ export default function RecipeImport() {
       }
 
       patch(entry.uid, { phase: 'matching', rawText })
-      const { candidates, best, confident } = matchFilename(entry.file.name, index)
+      const { candidates, best, confident, alreadyImported } = matchFilename(entry.file.name, index)
+      // Already imported (a recipe with text matches strongly) → skip, never offer.
+      if (alreadyImported) {
+        const target = best && best.has_text ? best : null
+        patch(entry.uid, {
+          phase: 'skipped', rawText, candidates, selectedId: target?.id ?? null,
+          skipNote: target ? `#${target.sl_no} ${target.recipe_name} already has text — left unchanged` : 'Already imported — left unchanged',
+        })
+        continue
+      }
       // Default to Skip unless we have a confident match onto an empty recipe.
       const preselect = confident && best && !best.has_text ? best.id : null
       patch(entry.uid, {

@@ -27,6 +27,7 @@ export default function ReviewQueue() {
   const [items, setItems] = useState<ReviewItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [clearing, setClearing] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -49,6 +50,31 @@ export default function ReviewQueue() {
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
+  // Bulk-dismiss every pending item. Used to wipe a stale backlog (e.g. after an
+  // import run) so only fresh items remain. Updates in small concurrent batches.
+  async function clearAll() {
+    if (!items.length || clearing) return
+    if (!window.confirm(`Dismiss all ${items.length} pending review items? This can't be undone.`)) return
+    setClearing(true); setError('')
+    try {
+      const ids = items.map(i => i.id)
+      const batch = 20
+      for (let i = 0; i < ids.length; i += batch) {
+        await Promise.all(
+          ids.slice(i, i + batch).map(id =>
+            pb.collection('review_queue').update(id, { status: 'dismissed' })
+          )
+        )
+      }
+      setItems([])
+    } catch {
+      setError('Failed to clear the queue. Some items may remain — reload and try again.')
+      load()
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="w-full max-w-3xl">
       <div className="flex items-center justify-between mb-6">
@@ -58,9 +84,22 @@ export default function ReviewQueue() {
             Recipe texts skipped during import — resolve, attach, or dismiss them here.
           </p>
         </div>
-        <button onClick={() => navigate('/import')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800" title="Back to Import">
-          <ArrowLeft size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          {items.length > 0 && (
+            <button
+              onClick={clearAll}
+              disabled={clearing}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+              title="Dismiss all pending items"
+            >
+              {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              {clearing ? 'Clearing…' : 'Clear all'}
+            </button>
+          )}
+          <button onClick={() => navigate('/import')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800" title="Back to Import">
+            <ArrowLeft size={16} />
+          </button>
+        </div>
       </div>
 
       {error && (
