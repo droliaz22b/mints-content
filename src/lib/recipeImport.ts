@@ -379,6 +379,67 @@ export function matchFilename(filename: string, index: RecipeIndexEntry[]): Matc
   return { candidates, best, bestScore, confident, alreadyImported }
 }
 
+// ─── Content-based duplicate detection ────────────────────────────────────────
+// Filename matching misses an already-imported recipe when the file name and the
+// recipe name diverge (e.g. regional spellings "Parwal" vs "Patal"). As a safety
+// net, compare the doc's distinctive body words against existing recipe bodies:
+// if most of them already appear in one recipe, the doc is already imported.
+
+const DUP_MIN_TOKENS = 8       // need enough distinctive words to trust a match
+const DUP_COVERAGE = 0.55      // ≥55% of the doc's words present in a body → dup
+const DUP_SEARCH_TERMS = 4     // distinctive words used to find candidate recipes
+const DUP_MAX_CANDIDATES = 24
+
+// Distinctive (≥4-char, non-noise) words of a block of text, deduped.
+function contentTokens(text: string): string[] {
+  return [...new Set(recipeTokens(text).filter(t => t.length >= 4))]
+}
+
+// Returns the recipe whose body already contains this doc's content, or null.
+// Only meant for docs with no confident filename match (a fallback, so the cost
+// of a few searches is paid only when something would otherwise go to review).
+export async function findImportedDuplicate(
+  rawText: string,
+): Promise<{ id: string; sl_no: number; recipe_name: string } | null> {
+  const docTokens = contentTokens(rawText)
+  if (docTokens.length < DUP_MIN_TOKENS) return null
+
+  // Find candidate recipes by their most distinctive (longest) words. A union
+  // across a few terms keeps recall up without scanning every recipe body.
+  const terms = [...docTokens].sort((a, b) => b.length - a.length).slice(0, DUP_SEARCH_TERMS)
+  const seen = new Map<string, { id: string; sl_no: number; recipe_name: string; body: string }>()
+  for (const term of terms) {
+    if (seen.size >= DUP_MAX_CANDIDATES) break
+    try {
+      const res = await pb.collection('recipes').getList(1, 10, {
+        filter: pb.filter('recipe_copy ~ {:q}', { q: term }),
+        fields: 'id,sl_no,recipe_name,recipe_copy',
+      })
+      for (const r of res.items) {
+        if (!seen.has(r.id)) {
+          seen.set(r.id, {
+            id: r.id, sl_no: r.sl_no as number, recipe_name: r.recipe_name as string,
+            body: String(r.recipe_copy || ''),
+          })
+        }
+      }
+    } catch { /* skip a failed term, keep going */ }
+  }
+  if (!seen.size) return null
+
+  // Pick the recipe whose body covers the most of the doc's distinctive words.
+  let best: { id: string; sl_no: number; recipe_name: string } | null = null
+  let bestCov = 0
+  for (const c of seen.values()) {
+    const bodySet = new Set(contentTokens(c.body))
+    let hit = 0
+    for (const t of docTokens) if (bodySet.has(t)) hit++
+    const cov = hit / docTokens.length
+    if (cov > bestCov) { bestCov = cov; best = { id: c.id, sl_no: c.sl_no, recipe_name: c.recipe_name } }
+  }
+  return bestCov >= DUP_COVERAGE ? best : null
+}
+
 // ─── Review queue persistence ─────────────────────────────────────────────────
 
 export type ReviewReason = 'no_match' | 'multiple_matches' | 'error' | 'duplicate'

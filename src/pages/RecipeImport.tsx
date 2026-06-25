@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
-import { formatRecipeWithAI, saveReviewItem, loadCategoryTaxonomy, loadRecipeIndex, matchFilename } from '../lib/recipeImport'
+import { formatRecipeWithAI, saveReviewItem, loadCategoryTaxonomy, loadRecipeIndex, matchFilename, findImportedDuplicate } from '../lib/recipeImport'
 import type { RecipeIndexEntry } from '../lib/recipeImport'
 import { normalizeTagList } from '../lib/tagNormalize'
 import {
@@ -203,6 +203,15 @@ export default function RecipeImport() {
         continue
       }
 
+      // Filename didn't confidently match. Before sending to review, check whether
+      // the doc's *content* already lives in a recipe (handles name/spelling drift
+      // like "Parwal" vs "Patal"). If so, it's already imported → skip.
+      const dup = await findImportedDuplicate(rawText)
+      if (dup) {
+        patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: dup.id, skipNote: `#${dup.sl_no} ${dup.recipe_name} already has this recipe — left unchanged` })
+        alreadyExists++; continue
+      }
+
       // No plausible candidate at all → queue for later, no inline clutter.
       if (candidates.length === 0) {
         patch(entry.uid, { phase: 'skipped', rawText, candidates: [], selectedId: null, skipNote: 'No matching recipe found' })
@@ -264,6 +273,14 @@ export default function RecipeImport() {
           skipNote: target ? `#${target.sl_no} ${target.recipe_name} already has text — left unchanged` : 'Already imported — left unchanged',
         })
         continue
+      }
+      // No confident match → check whether the doc's content is already in a recipe.
+      if (!(confident && best && !best.has_text)) {
+        const dup = await findImportedDuplicate(rawText)
+        if (dup) {
+          patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: dup.id, skipNote: `#${dup.sl_no} ${dup.recipe_name} already has this recipe — left unchanged` })
+          continue
+        }
       }
       // Default to Skip unless we have a confident match onto an empty recipe.
       const preselect = confident && best && !best.has_text ? best.id : null
