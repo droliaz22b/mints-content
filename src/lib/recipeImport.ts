@@ -264,6 +264,7 @@ export async function loadRecipeIndex(): Promise<RecipeIndexEntry[]> {
 export interface MatchResult {
   candidates: Candidate[]   // best-first, score >= MIN_MATCH_SCORE, capped
   best: Candidate | null    // the top candidate (or null when none)
+  bestScore: number         // similarity of the top candidate (0–1)
   confident: boolean        // safe to auto-import to `best` without review
 }
 
@@ -271,6 +272,16 @@ const MIN_MATCH_SCORE = 0.34   // below this a recipe is not even shown as a can
 const AUTO_MATCH_SCORE = 0.72  // best must reach this to auto-import
 const AUTO_MATCH_MARGIN = 0.25 // …and lead the runner-up by this much (so duplicates stay ambiguous)
 const MAX_CANDIDATES = 6
+
+// Fraction of `a`'s distinct tokens that also appear in `b` (directional coverage).
+function coverage(a: string[], b: string[]): number {
+  const sa = new Set(a)
+  if (!sa.size) return 0
+  const sb = new Set(b)
+  let hit = 0
+  for (const t of sa) if (sb.has(t)) hit++
+  return hit / sa.size
+}
 
 // Rank a filename against the recipe index. Returns the plausible candidates
 // (best first) and whether the top one is a confident, unambiguous match.
@@ -285,12 +296,26 @@ export function matchFilename(filename: string, index: RecipeIndexEntry[]): Matc
     id: s.entry.id, sl_no: s.entry.sl_no, recipe_name: s.entry.recipe_name, has_text: s.entry.has_text,
   }))
   const best = top[0] ?? null
-  const bestScore = scored[0]?.score ?? 0
+  const bestEntry = scored[0]
+  const bestScore = bestEntry?.score ?? 0
   const secondScore = scored[1]?.score ?? 0
-  const confident =
-    !!best && bestScore >= AUTO_MATCH_SCORE && (bestScore - secondScore) >= AUTO_MATCH_MARGIN
+  const margin = bestScore - secondScore
 
-  return { candidates: top, best, confident }
+  // A filename is a confident match when one recipe clearly stands out:
+  //  • high overlap AND a clear lead over the runner-up, OR
+  //  • an exact token-set match that's essentially unique, OR
+  //  • every significant filename token is contained in the recipe name
+  //    (e.g. "Mango Pastry" → "Mango Pastry Cake") with a clear lead.
+  const exact = !!bestEntry && bestScore >= 0.999
+  const contained =
+    !!bestEntry && fileTok.length >= 2 && coverage(fileTok, bestEntry.entry.tokens) === 1
+  const confident = !!best && (
+    (bestScore >= AUTO_MATCH_SCORE && margin >= AUTO_MATCH_MARGIN) ||
+    (exact && margin >= 0.1) ||
+    (contained && bestScore >= 0.6 && margin >= 0.12)
+  )
+
+  return { candidates: top, best, bestScore, confident }
 }
 
 // ─── Review queue persistence ─────────────────────────────────────────────────

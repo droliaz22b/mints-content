@@ -43,7 +43,7 @@ export default function RecipeImport() {
   const [processing, setProcessing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [autoImporting, setAutoImporting] = useState(false)
-  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; duplicates: number; noMatch: number; errors: number } | null>(null)
+  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; alreadyExists: number; noMatch: number; errors: number } | null>(null)
   const [showProcessed, setShowProcessed] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [folderLoading, setFolderLoading] = useState(false)
@@ -157,7 +157,7 @@ export default function RecipeImport() {
       return
     }
 
-    let imported = 0, review = 0, duplicates = 0, noMatch = 0, errors = 0
+    let imported = 0, review = 0, alreadyExists = 0, noMatch = 0, errors = 0
 
     for (const entry of queue) {
       if (cancelRef.current) break
@@ -192,11 +192,11 @@ export default function RecipeImport() {
         continue
       }
 
-      // Confident match but the recipe already has text → never overwrite; queue it.
-      if (confident && best && best.has_text) {
-        patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: best.id, skipNote: `Matched #${best.sl_no} ${best.recipe_name}, which already has text` })
-        await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'duplicate', duplicate: true, candidates }).catch(() => {})
-        duplicates++; continue
+      // The best-matching recipe already has text → it's already created.
+      // Leave it untouched and do NOT queue it for review (just report the count).
+      if (best && best.has_text) {
+        patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: best.id, skipNote: `#${best.sl_no} ${best.recipe_name} already has text — left unchanged` })
+        alreadyExists++; continue
       }
 
       // No plausible candidate at all → queue for later, no inline clutter.
@@ -216,7 +216,7 @@ export default function RecipeImport() {
       review++
     }
 
-    setAutoSummary({ imported, review, duplicates, noMatch, errors })
+    setAutoSummary({ imported, review, alreadyExists, noMatch, errors })
     setAutoImporting(false)
   }
 
@@ -405,10 +405,10 @@ export default function RecipeImport() {
               {autoSummary.review} ambiguous file{autoSummary.review !== 1 ? 's' : ''} need your pick — see below
             </p>
           )}
-          {autoSummary.duplicates > 0 && (
-            <p className="text-sm text-orange-700 flex items-center gap-2">
-              <AlertCircle size={14} />
-              {autoSummary.duplicates} matched recipe{autoSummary.duplicates !== 1 ? 's' : ''} already had text — not overwritten, sent to Review Later
+          {autoSummary.alreadyExists > 0 && (
+            <p className="text-sm text-gray-600 flex items-center gap-2">
+              <CheckCircle size={14} className="text-gray-400" />
+              {autoSummary.alreadyExists} file{autoSummary.alreadyExists !== 1 ? 's' : ''} matched a recipe that already has text — left unchanged
             </p>
           )}
           {autoSummary.noMatch > 0 && (
@@ -423,9 +423,9 @@ export default function RecipeImport() {
               {autoSummary.errors} error{autoSummary.errors !== 1 ? 's' : ''}
             </p>
           )}
-          {(autoSummary.duplicates + autoSummary.noMatch + autoSummary.errors) > 0 && (
+          {(autoSummary.noMatch + autoSummary.errors) > 0 && (
             <p className="text-xs text-gray-500 pt-1">
-              Skipped items are saved to the{' '}
+              Unresolved items are saved to the{' '}
               <button onClick={() => navigate('/review')} className="underline hover:text-black">Review Later</button>{' '}
               queue — you can resolve them anytime.
             </p>
