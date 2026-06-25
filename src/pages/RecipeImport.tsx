@@ -1,16 +1,17 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pb } from '../lib/pocketbase'
-import { formatRecipeWithAI, recipeHasText, saveReviewItem, loadCategoryTaxonomy } from '../lib/recipeImport'
+import { formatRecipeWithAI, saveReviewItem, loadCategoryTaxonomy, loadRecipeIndex, matchFilename } from '../lib/recipeImport'
+import type { RecipeIndexEntry } from '../lib/recipeImport'
 import { normalizeTagList } from '../lib/tagNormalize'
 import {
   Upload, FileText, CheckCircle, XCircle, Loader2,
-  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, FolderOpen, Zap,
+  AlertCircle, ChevronDown, ChevronUp, X, ArrowLeft, FolderOpen, Zap, SkipForward, Search,
 } from 'lucide-react'
 
 interface Candidate { id: string; sl_no: number; recipe_name: string; has_text?: boolean }
 
-type Phase = 'idle' | 'extracting' | 'matching' | 'ready' | 'uploading' | 'done' | 'error'
+type Phase = 'idle' | 'extracting' | 'matching' | 'ready' | 'uploading' | 'done' | 'skipped' | 'error'
 
 interface FileEntry {
   uid: string
@@ -21,6 +22,7 @@ interface FileEntry {
   selectedId?: string | null   // null = explicit skip
   formattedText?: string
   errorMsg?: string
+  skipNote?: string             // why this file was auto-skipped to Review Later
   expanded: boolean
 }
 
@@ -33,38 +35,6 @@ async function extractDocx(file: File): Promise<string> {
   return result.value.trim()
 }
 
-async function findCandidates(filename: string): Promise<Candidate[]> {
-  const name = filename.replace(/\.docx$/i, '').trim().replace(/"/g, '')
-
-  const run = async (filter: string) => {
-    const res = await pb.collection('recipes').getList<Candidate>(1, 6, {
-      filter,
-      fields: 'id,sl_no,recipe_name',
-      sort: 'sl_no',
-    })
-    return res.items
-  }
-
-  let hits = await run(`recipe_name ~ "${name}"`)
-  if (hits.length) return hits
-
-  const words = name.split(/\s+/).filter(w => w.length > 3)
-  if (words.length >= 2) {
-    hits = await run(words.map(w => `recipe_name ~ "${w}"`).join(' && '))
-    if (hits.length) return hits
-  }
-
-  if (words.length >= 2) {
-    hits = await run(words.slice(0, 2).map(w => `recipe_name ~ "${w}"`).join(' && '))
-    if (hits.length) return hits
-  }
-
-  if (words.length >= 1) {
-    hits = await run(`recipe_name ~ "${words[0]}"`)
-  }
-  return hits
-}
-
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function RecipeImport() {
@@ -73,7 +43,8 @@ export default function RecipeImport() {
   const [processing, setProcessing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [autoImporting, setAutoImporting] = useState(false)
-  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; duplicates: number; errors: number } | null>(null)
+  const [autoSummary, setAutoSummary] = useState<{ imported: number; review: number; duplicates: number; noMatch: number; errors: number } | null>(null)
+  const [showProcessed, setShowProcessed] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [folderLoading, setFolderLoading] = useState(false)
   const [cancelled, setCancelled] = useState(false)
@@ -108,6 +79,17 @@ export default function RecipeImport() {
 
   function patch(uid: string, delta: Partial<FileEntry>) {
     setEntries(prev => prev.map(e => e.uid === uid ? { ...e, ...delta } : e))
+  }
+
+  // Add a manually-searched recipe to a file's candidate list and select it,
+  // so it can be picked & imported just like an auto-matched candidate.
+  function addCandidate(uid: string, c: Candidate) {
+    setEntries(prev => prev.map(e => {
+      if (e.uid !== uid) return e
+      const list = e.candidates ?? []
+      const candidates = list.some(x => x.id === c.id) ? list : [...list, c]
+      return { ...e, candidates, selectedId: c.id }
+    }))
   }
 
   function addFiles(files: File[]) {
@@ -148,7 +130,13 @@ export default function RecipeImport() {
     await pb.collection('recipes').update(recipeId, payload)
   }
 
-  // ── Auto-Import All: uploads clear matches, flags ambiguous for review ────
+  // ── Auto-Import All: uploads confident matches, queues the rest ───────────
+  // - Confident match onto an empty recipe → imported immediately.
+  // - Confident match onto a recipe that already has text → auto-skipped to
+  //   Review Later (never overwritten silently).
+  // - No plausible match → auto-skipped to Review Later.
+  // - Multiple plausible candidates with no clear winner → kept inline for a
+  //   quick pick (defaulting to Skip).
   async function autoImportAll() {
     const queue = entries.filter(e => e.phase === 'idle')
     if (!queue.length) return
@@ -160,8 +148,16 @@ export default function RecipeImport() {
     const tagRecords = await pb.collection('tags').getFullList({ fields: 'name' }).catch(() => [])
     const knownTags = new Set(tagRecords.map((t) => (t['name'] as string || '').toLowerCase()))
     const taxonomy = await loadCategoryTaxonomy().catch(() => [])
+    let index: RecipeIndexEntry[]
+    try {
+      index = await loadRecipeIndex()
+    } catch {
+      setAutoImporting(false)
+      alert('Could not load the recipe list. Check your connection and try again.')
+      return
+    }
 
-    let imported = 0, review = 0, duplicates = 0, errors = 0
+    let imported = 0, review = 0, duplicates = 0, noMatch = 0, errors = 0
 
     for (const entry of queue) {
       if (cancelRef.current) break
@@ -176,32 +172,16 @@ export default function RecipeImport() {
       }
 
       patch(entry.uid, { phase: 'matching', rawText })
-      let candidates: Candidate[] = []
-      try {
-        candidates = await findCandidates(entry.file.name)
-      } catch {
-        patch(entry.uid, { phase: 'error', errorMsg: 'Recipe search failed.' })
-        await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'error', duplicate: false, candidates: [], note: 'Recipe search failed.' }).catch(() => {})
-        errors++; continue
-      }
+      const { candidates, best, confident } = matchFilename(entry.file.name, index)
 
-      if (candidates.length === 1) {
-        const match = candidates[0]
-        // Duplicate guard — don't silently overwrite a recipe that already has text
-        const current = await pb.collection('recipes').getOne(match.id, { fields: 'tags,recipe_copy' }).catch(() => null)
-        const hasText = !!(current?.recipe_copy && String(current.recipe_copy).trim())
-        if (hasText) {
-          const dupCandidates = [{ ...match, has_text: true }]
-          patch(entry.uid, { phase: 'ready', rawText, candidates: dupCandidates, selectedId: match.id, expanded: true })
-          await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'duplicate', duplicate: true, candidates: dupCandidates }).catch(() => {})
-          duplicates++; continue
-        }
-        // Exactly one match, no existing text — auto-upload immediately
-        patch(entry.uid, { phase: 'uploading', candidates, selectedId: match.id })
+      // Confident, unambiguous match onto an empty recipe → import right away.
+      if (confident && best && !best.has_text) {
+        patch(entry.uid, { phase: 'uploading', candidates, selectedId: best.id })
         try {
-          const { recipe: formatted, tags: aiTags, categories: aiCats } = await formatRecipeWithAI(rawText, match.recipe_name, taxonomy)
+          const { recipe: formatted, tags: aiTags, categories: aiCats } = await formatRecipeWithAI(rawText, best.recipe_name, taxonomy)
+          const current = await pb.collection('recipes').getOne(best.id, { fields: 'tags' }).catch(() => null)
           const existing = Array.isArray(current?.tags) ? current!.tags as string[] : []
-          await applyTagsAndUpload(match.id, existing, aiTags, formatted, knownTags, aiCats)
+          await applyTagsAndUpload(best.id, existing, aiTags, formatted, knownTags, aiCats)
           patch(entry.uid, { phase: 'done', formattedText: formatted })
           imported++
         } catch (err) {
@@ -209,39 +189,55 @@ export default function RecipeImport() {
           await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'error', duplicate: false, candidates, note: err instanceof Error ? err.message : 'Upload failed' }).catch(() => {})
           errors++
         }
-      } else {
-        // 0 or 2+ matches — flag candidates that already have text, persist for later
-        const withText: Candidate[] = await Promise.all(
-          candidates.map(async c => ({ ...c, has_text: await recipeHasText(c.id) }))
-        )
-        const isDup = withText.some(c => c.has_text)
-        patch(entry.uid, {
-          phase: 'ready',
-          rawText,
-          candidates: withText,
-          selectedId: withText.length > 0 ? withText[0].id : null,
-          expanded: true,
-        })
-        await saveReviewItem({
-          file_name: entry.file.name, raw_text: rawText,
-          reason: candidates.length === 0 ? 'no_match' : 'multiple_matches',
-          duplicate: isDup, candidates: withText,
-        }).catch(() => {})
-        review++
+        continue
       }
+
+      // Confident match but the recipe already has text → never overwrite; queue it.
+      if (confident && best && best.has_text) {
+        patch(entry.uid, { phase: 'skipped', rawText, candidates, selectedId: best.id, skipNote: `Matched #${best.sl_no} ${best.recipe_name}, which already has text` })
+        await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'duplicate', duplicate: true, candidates }).catch(() => {})
+        duplicates++; continue
+      }
+
+      // No plausible candidate at all → queue for later, no inline clutter.
+      if (candidates.length === 0) {
+        patch(entry.uid, { phase: 'skipped', rawText, candidates: [], selectedId: null, skipNote: 'No matching recipe found' })
+        await saveReviewItem({ file_name: entry.file.name, raw_text: rawText, reason: 'no_match', duplicate: false, candidates: [] }).catch(() => {})
+        noMatch++; continue
+      }
+
+      // Ambiguous — several plausible candidates, no clear winner. Keep inline so
+      // the user can pick, but default to Skip so nothing is attached by accident.
+      patch(entry.uid, { phase: 'ready', rawText, candidates, selectedId: null, expanded: true })
+      await saveReviewItem({
+        file_name: entry.file.name, raw_text: rawText,
+        reason: 'multiple_matches', duplicate: candidates.some(c => c.has_text), candidates,
+      }).catch(() => {})
+      review++
     }
 
-    setAutoSummary({ imported, review, duplicates, errors })
+    setAutoSummary({ imported, review, duplicates, noMatch, errors })
     setAutoImporting(false)
   }
 
   // ── Match only (no upload) — review all before uploading ─────────────────
+  // Pre-selects a confident match so clear files are one click away, but leaves
+  // ambiguous / has-text files on Skip so nothing is attached by accident.
   const processAll = useCallback(async () => {
     const queue = entries.filter(e => e.phase === 'idle')
     if (!queue.length) return
     cancelRef.current = false
     setCancelled(false)
     setProcessing(true)
+
+    let index: RecipeIndexEntry[]
+    try {
+      index = await loadRecipeIndex()
+    } catch {
+      setProcessing(false)
+      alert('Could not load the recipe list. Check your connection and try again.')
+      return
+    }
 
     for (const entry of queue) {
       if (cancelRef.current) break
@@ -255,20 +251,15 @@ export default function RecipeImport() {
       }
 
       patch(entry.uid, { phase: 'matching', rawText })
-      let candidates: Candidate[] = []
-      try {
-        candidates = await findCandidates(entry.file.name)
-      } catch {
-        patch(entry.uid, { phase: 'error', errorMsg: 'Recipe search failed.' })
-        continue
-      }
-
+      const { candidates, best, confident } = matchFilename(entry.file.name, index)
+      // Default to Skip unless we have a confident match onto an empty recipe.
+      const preselect = confident && best && !best.has_text ? best.id : null
       patch(entry.uid, {
         phase: 'ready',
         rawText,
         candidates,
-        selectedId: candidates.length >= 1 ? candidates[0].id : null,
-        expanded: candidates.length !== 1,
+        selectedId: preselect,
+        expanded: !preselect,
       })
     }
 
@@ -309,11 +300,13 @@ export default function RecipeImport() {
   }
 
   const busy = processing || uploading || autoImporting
-  const idleCount  = entries.filter(e => e.phase === 'idle').length
-  const readyCount = entries.filter(e => e.phase === 'ready' && e.selectedId).length
-  const doneCount  = entries.filter(e => e.phase === 'done').length
-  const errorCount = entries.filter(e => e.phase === 'error').length
+  const idleCount   = entries.filter(e => e.phase === 'idle').length
+  const readyCount  = entries.filter(e => e.phase === 'ready' && e.selectedId).length
+  const doneCount   = entries.filter(e => e.phase === 'done').length
+  const errorCount  = entries.filter(e => e.phase === 'error').length
   const reviewCount = entries.filter(e => e.phase === 'ready').length
+  const skippedCount = entries.filter(e => e.phase === 'skipped').length
+  const processedEntries = entries.filter(e => e.phase === 'done' || e.phase === 'skipped')
 
   return (
     <div className="w-full max-w-3xl">
@@ -333,8 +326,8 @@ export default function RecipeImport() {
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2.5">How it works</p>
         <ol className="space-y-1.5 text-sm text-gray-600">
           <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">1</span> Add your <strong>.docx</strong> recipe files (or a whole folder).</li>
-          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">2</span> Click <strong>Start Import</strong> — files that clearly match one recipe are imported automatically.</li>
-          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">3</span> Anything unclear is flagged <strong>Needs review</strong> below — pick the right recipe, then <strong>Import selected</strong>.</li>
+          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">2</span> Click <strong>Start Import</strong> — files that clearly match one empty recipe are imported automatically.</li>
+          <li className="flex gap-2.5"><span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-xs flex items-center justify-center font-medium">3</span> No match or already has text? It's sent to <strong>Review Later</strong>, never overwritten. Only genuinely ambiguous files stay below to <strong>pick or skip</strong>.</li>
         </ol>
       </div>
 
@@ -384,6 +377,7 @@ export default function RecipeImport() {
           <span>{entries.length} file{entries.length !== 1 ? 's' : ''}</span>
           {doneCount  > 0 && <span className="text-green-600">✓ {doneCount} imported</span>}
           {reviewCount > 0 && <span className="text-amber-700">⚠ {reviewCount} need review</span>}
+          {skippedCount > 0 && <span className="text-gray-500">↪ {skippedCount} to Review Later</span>}
           {errorCount > 0 && <span className="text-red-600">✕ {errorCount} error{errorCount > 1 ? 's' : ''}</span>}
           <button onClick={() => { setEntries([]); setAutoSummary(null) }} className="ml-auto text-gray-400 hover:text-gray-700 text-xs">
             Clear all
@@ -408,13 +402,19 @@ export default function RecipeImport() {
           {autoSummary.review > 0 && (
             <p className="text-sm text-amber-700 flex items-center gap-2">
               <AlertCircle size={14} />
-              {autoSummary.review} file{autoSummary.review !== 1 ? 's' : ''} need your review — see below
+              {autoSummary.review} ambiguous file{autoSummary.review !== 1 ? 's' : ''} need your pick — see below
             </p>
           )}
           {autoSummary.duplicates > 0 && (
             <p className="text-sm text-orange-700 flex items-center gap-2">
               <AlertCircle size={14} />
-              {autoSummary.duplicates} possible duplicate{autoSummary.duplicates !== 1 ? 's' : ''} — recipe already has text, not overwritten
+              {autoSummary.duplicates} matched recipe{autoSummary.duplicates !== 1 ? 's' : ''} already had text — not overwritten, sent to Review Later
+            </p>
+          )}
+          {autoSummary.noMatch > 0 && (
+            <p className="text-sm text-gray-600 flex items-center gap-2">
+              <AlertCircle size={14} />
+              {autoSummary.noMatch} file{autoSummary.noMatch !== 1 ? 's' : ''} had no matching recipe — sent to Review Later
             </p>
           )}
           {autoSummary.errors > 0 && (
@@ -423,9 +423,9 @@ export default function RecipeImport() {
               {autoSummary.errors} error{autoSummary.errors !== 1 ? 's' : ''}
             </p>
           )}
-          {(autoSummary.review + autoSummary.duplicates + autoSummary.errors) > 0 && (
+          {(autoSummary.duplicates + autoSummary.noMatch + autoSummary.errors) > 0 && (
             <p className="text-xs text-gray-500 pt-1">
-              All skipped items are saved to the{' '}
+              Skipped items are saved to the{' '}
               <button onClick={() => navigate('/review')} className="underline hover:text-black">Review Later</button>{' '}
               queue — you can resolve them anytime.
             </p>
@@ -433,10 +433,12 @@ export default function RecipeImport() {
         </div>
       )}
 
-      {/* File cards — review-needed first, then done */}
+      {/* File cards — only files needing attention render in full. Imported and
+          auto-skipped files collapse into a compact, expandable group below so a
+          large batch stays light. Review-needed cards come first. */}
       {entries.length > 0 && (
         <div className="space-y-2 mb-5">
-          {/* Show files needing review at top */}
+          {/* Files needing a pick at top */}
           {entries.filter(e => e.phase === 'ready').map(entry => (
             <EntryCard
               key={entry.uid}
@@ -444,18 +446,42 @@ export default function RecipeImport() {
               onRemove={() => setEntries(prev => prev.filter(e => e.uid !== entry.uid))}
               onSelect={id => patch(entry.uid, { selectedId: id })}
               onToggle={() => patch(entry.uid, { expanded: !entry.expanded })}
+              onPickSearched={c => addCandidate(entry.uid, c)}
             />
           ))}
-          {/* Then all other entries */}
-          {entries.filter(e => e.phase !== 'ready').map(entry => (
+          {/* In-flight + errors (transient / need attention) */}
+          {entries.filter(e => e.phase !== 'ready' && e.phase !== 'done' && e.phase !== 'skipped').map(entry => (
             <EntryCard
               key={entry.uid}
               entry={entry}
               onRemove={() => setEntries(prev => prev.filter(e => e.uid !== entry.uid))}
               onSelect={id => patch(entry.uid, { selectedId: id })}
               onToggle={() => patch(entry.uid, { expanded: !entry.expanded })}
+              onPickSearched={c => addCandidate(entry.uid, c)}
             />
           ))}
+
+          {/* Processed (imported + auto-skipped) — collapsed by default */}
+          {processedEntries.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <button
+                onClick={() => setShowProcessed(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                {showProcessed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                <span className="font-medium">Processed</span>
+                <span className="text-gray-400">·</span>
+                {doneCount > 0 && <span className="text-green-600">{doneCount} imported</span>}
+                {doneCount > 0 && skippedCount > 0 && <span className="text-gray-300">/</span>}
+                {skippedCount > 0 && <span className="text-gray-500">{skippedCount} sent to Review Later</span>}
+              </button>
+              {showProcessed && (
+                <div className="border-t border-gray-100 divide-y divide-gray-50">
+                  {processedEntries.map(entry => <ProcessedRow key={entry.uid} entry={entry} />)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -470,7 +496,7 @@ export default function RecipeImport() {
                 <span className="truncate">
                   {cancelled
                     ? 'Stopping after the current file…'
-                    : autoImporting ? `Importing… (${doneCount + reviewCount + errorCount}/${entries.length})`
+                    : autoImporting ? `Importing… (${doneCount + reviewCount + skippedCount + errorCount}/${entries.length})`
                     : processing ? 'Matching files…'
                     : 'Importing selected…'}
                 </span>
@@ -550,6 +576,7 @@ const PHASE_LABEL: Record<Phase, string> = {
   ready:      'Needs review',
   uploading:  'Uploading…',
   done:       'Imported',
+  skipped:    'Review Later',
   error:      'Error',
 }
 
@@ -560,16 +587,35 @@ const PHASE_CLASS: Record<Phase, string> = {
   ready:      'text-amber-700 bg-amber-50',
   uploading:  'text-blue-700 bg-blue-50',
   done:       'text-green-700 bg-green-50',
+  skipped:    'text-gray-600 bg-gray-100',
   error:      'text-red-700 bg-red-50',
 }
 
+// ─── compact row for processed (imported / auto-skipped) files ──────────────────
+
+function ProcessedRow({ entry }: { entry: FileEntry }) {
+  const skipped = entry.phase === 'skipped'
+  return (
+    <div className="flex items-center gap-2.5 px-4 py-2 text-sm">
+      {skipped
+        ? <SkipForward size={13} className="text-gray-400 flex-shrink-0" />
+        : <CheckCircle size={13} className="text-green-500 flex-shrink-0" />}
+      <span className="text-gray-700 truncate flex-1 min-w-0">{entry.file.name}</span>
+      <span className="text-xs text-gray-400 truncate max-w-[55%] text-right">
+        {skipped ? (entry.skipNote || 'Sent to Review Later') : 'Imported'}
+      </span>
+    </div>
+  )
+}
+
 function EntryCard({
-  entry, onRemove, onSelect, onToggle,
+  entry, onRemove, onSelect, onToggle, onPickSearched,
 }: {
   entry: FileEntry
   onRemove: () => void
   onSelect: (id: string | null) => void
   onToggle: () => void
+  onPickSearched: (c: Candidate) => void
 }) {
   const spinning = entry.phase === 'extracting' || entry.phase === 'matching' || entry.phase === 'uploading'
   const expandable = entry.phase === 'ready'
@@ -695,10 +741,16 @@ function EntryCard({
             ) : (
               <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2.5">
                 <AlertCircle size={14} />
-                No matching recipes found.
-                <button onClick={() => onSelect(null)} className="ml-auto text-xs text-gray-500 underline hover:text-gray-800">Skip</button>
+                No matching recipes found — search for the right one below, or skip.
               </div>
             )}
+
+            {/* Manual search — find a recipe that wasn't auto-matched */}
+            <RecipeSearch
+              selectedId={entry.selectedId}
+              knownIds={new Set((entry.candidates ?? []).map(c => c.id))}
+              onPick={onPickSearched}
+            />
           </div>
 
           {entry.rawText && (
@@ -710,6 +762,100 @@ function EntryCard({
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── inline recipe search (for ambiguous / no-match review cards) ───────────────
+
+function RecipeSearch({
+  selectedId, knownIds, onPick,
+}: {
+  selectedId?: string | null
+  knownIds: Set<string>
+  onPick: (c: Candidate) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Candidate[]>([])
+  const [searching, setSearching] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function search() {
+    const q = query.trim()
+    if (!q) return
+    setSearching(true); setErr('')
+    try {
+      const res = await pb.collection('recipes').getList(1, 8, {
+        filter: pb.filter('recipe_name ~ {:q}', { q }),
+        fields: 'id,sl_no,recipe_name,recipe_copy:excerpt(1)',
+        sort: 'recipe_name',
+      })
+      setResults(res.items.map(r => ({
+        id: r.id as string, sl_no: r.sl_no as number, recipe_name: r.recipe_name as string,
+        has_text: !!(r['recipe_copy'] && String(r['recipe_copy']).trim()),
+      })))
+    } catch {
+      setErr('Search failed.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mt-2 text-xs text-gray-500 hover:text-black underline flex items-center gap-1">
+        <Search size={12} /> Search for a different recipe
+      </button>
+    )
+  }
+
+  // Only show results that aren't already in the candidate list above.
+  const fresh = results.filter(r => !knownIds.has(r.id))
+
+  return (
+    <div className="mt-2.5 space-y-2">
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); search() } }}
+            autoFocus
+            placeholder="Search a recipe by name…"
+            className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          />
+        </div>
+        <button onClick={search} disabled={searching || !query.trim()} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 bg-white">
+          {searching ? <Loader2 size={14} className="animate-spin" /> : 'Search'}
+        </button>
+      </div>
+
+      {err && <p className="text-xs text-red-600">{err}</p>}
+
+      {fresh.length > 0 && (
+        <div className="space-y-1.5">
+          {fresh.map(c => (
+            <label
+              key={c.id}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                selectedId === c.id ? 'border-black bg-white' : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <input type="radio" checked={selectedId === c.id} onChange={() => onPick(c)} className="sr-only" />
+              <span className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 ${selectedId === c.id ? 'border-black bg-black' : 'border-gray-300'}`} />
+              <span className="text-xs text-gray-400 font-mono w-10 flex-shrink-0">#{c.sl_no}</span>
+              <span className="text-sm text-gray-800 flex-1">{c.recipe_name}</span>
+              {c.has_text && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 flex-shrink-0">has text</span>}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {!searching && query.trim() && results.length > 0 && fresh.length === 0 && (
+        <p className="text-xs text-gray-400">All matches are already listed above.</p>
       )}
     </div>
   )

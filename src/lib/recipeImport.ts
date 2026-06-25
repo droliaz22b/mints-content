@@ -201,6 +201,98 @@ export async function recipeHasText(recipeId: string): Promise<boolean> {
   }
 }
 
+// ─── Filename → recipe matching ────────────────────────────────────────────────
+// We rank a filename against the whole recipe list client-side using significant-
+// token overlap, which is far more precise than a substring search. Noise words
+// (numbers, time/filler words like "minute", "easy", "recipe") are stripped so a
+// file like "1 minute cold coffee" can never match "5 Minutes Rasmalai Cake".
+
+const MATCH_STOPWORDS = new Set([
+  'recipe', 'recipes', 'easy', 'quick', 'simple', 'homemade', 'style', 'best',
+  'perfect', 'the', 'a', 'an', 'with', 'and', 'of', 'for', 'in', 'to', 'on',
+  'minute', 'minutes', 'min', 'mins', 'hour', 'hours', 'sec', 'secs', 'second',
+  'seconds', 'instant', 'no', 'how', 'make', 'making', 'at', 'home', 'ingredient',
+  'ingredients', 'special', 'tasty', 'yummy', 'delicious', 'super', 'new', 'my',
+])
+
+// Significant lowercase tokens for a recipe / file name (numbers and noise removed).
+export function recipeTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/\.docx$/i, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(t => !/^\d+$/.test(t))         // drop pure numbers
+    .filter(t => !MATCH_STOPWORDS.has(t))  // drop filler words
+}
+
+// Sørensen–Dice overlap of two token sets → 1.0 when the sets are identical.
+function diceScore(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return 0
+  const sa = new Set(a), sb = new Set(b)
+  let inter = 0
+  for (const t of sa) if (sb.has(t)) inter++
+  return (2 * inter) / (sa.size + sb.size)
+}
+
+export interface RecipeIndexEntry {
+  id: string
+  sl_no: number
+  recipe_name: string
+  has_text: boolean
+  tokens: string[]
+}
+
+// Load every recipe once (id, sl_no, name, whether it already has text). Uses an
+// excerpt(1) on recipe_copy so we never pull full bodies just to test emptiness.
+export async function loadRecipeIndex(): Promise<RecipeIndexEntry[]> {
+  const recs = await pb.collection('recipes').getFullList({
+    fields: 'id,sl_no,recipe_name,recipe_copy:excerpt(1)',
+    sort: 'sl_no',
+    batch: 500,
+  })
+  return recs.map(r => ({
+    id: r.id as string,
+    sl_no: r.sl_no as number,
+    recipe_name: r.recipe_name as string,
+    has_text: !!(r['recipe_copy'] && String(r['recipe_copy']).trim()),
+    tokens: recipeTokens(r.recipe_name as string),
+  }))
+}
+
+export interface MatchResult {
+  candidates: Candidate[]   // best-first, score >= MIN_MATCH_SCORE, capped
+  best: Candidate | null    // the top candidate (or null when none)
+  confident: boolean        // safe to auto-import to `best` without review
+}
+
+const MIN_MATCH_SCORE = 0.34   // below this a recipe is not even shown as a candidate
+const AUTO_MATCH_SCORE = 0.72  // best must reach this to auto-import
+const AUTO_MATCH_MARGIN = 0.25 // …and lead the runner-up by this much (so duplicates stay ambiguous)
+const MAX_CANDIDATES = 6
+
+// Rank a filename against the recipe index. Returns the plausible candidates
+// (best first) and whether the top one is a confident, unambiguous match.
+export function matchFilename(filename: string, index: RecipeIndexEntry[]): MatchResult {
+  const fileTok = recipeTokens(filename)
+  const scored = index
+    .map(r => ({ entry: r, score: diceScore(fileTok, r.tokens) }))
+    .filter(s => s.score >= MIN_MATCH_SCORE)
+    .sort((a, b) => b.score - a.score)
+
+  const top = scored.slice(0, MAX_CANDIDATES).map(s => ({
+    id: s.entry.id, sl_no: s.entry.sl_no, recipe_name: s.entry.recipe_name, has_text: s.entry.has_text,
+  }))
+  const best = top[0] ?? null
+  const bestScore = scored[0]?.score ?? 0
+  const secondScore = scored[1]?.score ?? 0
+  const confident =
+    !!best && bestScore >= AUTO_MATCH_SCORE && (bestScore - secondScore) >= AUTO_MATCH_MARGIN
+
+  return { candidates: top, best, confident }
+}
+
 // ─── Review queue persistence ─────────────────────────────────────────────────
 
 export type ReviewReason = 'no_match' | 'multiple_matches' | 'error' | 'duplicate'
