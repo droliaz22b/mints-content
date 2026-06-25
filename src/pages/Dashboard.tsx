@@ -668,7 +668,7 @@ function RecipeCard({ recipe: r, selected, onSelect, onPreview, onEdit, onDelete
   return (
     <div
       onClick={onPreview}
-      className={`bg-white border rounded-xl p-3 sm:p-4 flex flex-col gap-2.5 group relative cursor-pointer hover:border-gray-400 transition-colors ${selected ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}
+      className={`bg-white border rounded-xl shadow-sm p-3 sm:p-4 flex flex-col gap-2.5 group relative cursor-pointer hover:border-gray-400 hover:shadow transition-all ${selected ? 'border-black ring-1 ring-black' : 'border-gray-200'}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">

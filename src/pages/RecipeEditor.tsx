@@ -234,7 +234,7 @@ Example output: paneer, onion, capsicum, maida`,
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         {/* Core fields */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-4">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-4">
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Core Details</h2>
 
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -275,7 +275,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Categories — multi-select grouped by type */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Categories</h2>
             {form.categories.length > 0 && <span className="text-[11px] text-gray-400">{form.categories.length} selected</span>}
@@ -305,7 +305,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Tags */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Tags</h2>
             {form.recipe_copy.trim() && (
@@ -412,7 +412,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Platforms */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-3">
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Platforms</h2>
           <div className="flex flex-wrap gap-2 sm:gap-3">
             {ALL_PLATFORMS.map(p => (
@@ -425,7 +425,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Social formats */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-4">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-4">
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Social Details</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <Field label="Instagram Format">
@@ -444,7 +444,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Checklist */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-3">
           <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Checklist</h2>
           <div className="flex flex-wrap gap-4 sm:gap-6">
             {(['docs', 'thumbnails', 'website_draft'] as const).map(field => (
@@ -462,7 +462,7 @@ Example output: paneer, onion, capsicum, maida`,
         </div>
 
         {/* Recipe copy */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Recipe Copy</h2>
             <div className="flex items-center gap-2">
