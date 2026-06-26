@@ -41,6 +41,8 @@ export interface TeamMember {
   email: string
   name: string
   role: UserRole
+  can_caption: boolean
+  can_thumbnail: boolean
   created: string
 }
 
@@ -49,6 +51,8 @@ export interface AppUser {
   email: string
   name: string
   role: UserRole
+  can_caption: boolean
+  can_thumbnail: boolean
 }
 
 export type ReviewReason = 'no_match' | 'multiple_matches' | 'error' | 'duplicate'

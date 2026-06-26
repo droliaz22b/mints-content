@@ -45,6 +45,8 @@ export default function Team() {
         role,
         password,
         passwordConfirm: password,
+        can_caption: true,
+        can_thumbnail: false,
       })
       setEmail(''); setName(''); setRole('editor'); setPassword(randomPassword())
       await loadMembers()
@@ -67,6 +69,13 @@ export default function Team() {
       await pb.collection('users').update(id, { role: newRole })
       await loadMembers()
     } catch { alert('Failed to update role.') }
+  }
+
+  async function toggleAccess(id: string, field: 'can_caption' | 'can_thumbnail', value: boolean) {
+    try {
+      await pb.collection('users').update(id, { [field]: value })
+      await loadMembers()
+    } catch { alert('Failed to update access.') }
   }
 
   return (
@@ -176,11 +185,13 @@ export default function Team() {
           <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[400px]">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Role</th>
+                  <th className="px-4 sm:px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Caption</th>
+                  <th className="px-4 sm:px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Thumbnail</th>
                   <th className="px-4 sm:px-6 py-3 w-12"></th>
                 </tr>
               </thead>
@@ -209,6 +220,26 @@ export default function Team() {
                         {ROLES.map(r => <option key={r} value={r} className="capitalize">{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
                       </select>
                     </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={m.role === 'admin' || m.can_caption}
+                        disabled={m.role === 'admin'}
+                        onChange={e => toggleAccess(m.id, 'can_caption', e.target.checked)}
+                        className="w-4 h-4 accent-black disabled:opacity-40"
+                        title={m.role === 'admin' ? 'Admins always have access' : 'Allow caption generation'}
+                      />
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={m.role === 'admin' || m.can_thumbnail}
+                        disabled={m.role === 'admin'}
+                        onChange={e => toggleAccess(m.id, 'can_thumbnail', e.target.checked)}
+                        className="w-4 h-4 accent-black disabled:opacity-40"
+                        title={m.role === 'admin' ? 'Admins always have access' : 'Allow thumbnail creation'}
+                      />
+                    </td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4">
                       <button onClick={() => deleteMember(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
                         <Trash2 size={14} />
@@ -217,7 +248,7 @@ export default function Team() {
                   </tr>
                 ))}
                 {members.length === 0 && (
-                  <tr><td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-400">No team members yet.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No team members yet.</td></tr>
                 )}
               </tbody>
             </table>
