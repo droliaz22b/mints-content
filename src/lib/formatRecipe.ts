@@ -1,3 +1,5 @@
+import { aiChat, AI_MODELS } from './ai'
+
 /**
  * Converts legacy plain-text recipe format (using • as bullet separator) to markdown.
  * Passes through text that already contains markdown syntax unchanged.
@@ -79,3 +81,66 @@ Rules:
 - Keep all original content — do not add or remove ingredients or steps
 - Clean up spacing and punctuation
 - Use only markdown formatting (**, -, 1.) — no HTML`
+
+// ─── Short recipe rewrite (for quick sharing / DMs) ───────────────────────────
+// Hard cap on the compact rewrite. The prompt asks for this, but models are
+// unreliable about character counts, so we also enforce it with a retry below.
+export const SHORT_RECIPE_CHAR_LIMIT = 900
+
+export const SHORT_RECIPE_SYSTEM_PROMPT = `You are a recipe editor. Rewrite the given recipe as a compact version that fits within ${SHORT_RECIPE_CHAR_LIMIT} characters total.
+
+Output using this exact structure (plain text, no markdown):
+
+Ingredients:
+- ingredient with quantity
+- ingredient with quantity
+
+Method:
+1. Clear concise step
+2. Clear concise step
+
+Rules:
+- The ENTIRE output MUST be under ${SHORT_RECIPE_CHAR_LIMIT} characters.
+- Keep every ingredient, but trim the wording.
+- Number every method step (1. 2. 3.) and keep each step short and actionable.
+- Combine or condense steps where possible without losing meaning.
+- Plain text only — no bold, no asterisks, no markdown headings.
+- Output only the recipe text — no preamble, labels, or explanation.`
+
+// Rewrite a recipe into a compact, numbered version under SHORT_RECIPE_CHAR_LIMIT
+// characters, via the shared AI proxy. Retries once if the model runs over.
+export async function rewriteRecipeShort(recipeName: string, recipeText: string): Promise<string> {
+  const userMsg = `Recipe Name: ${recipeName}\n\n${recipeText}`
+
+  const data = await aiChat({
+    model: AI_MODELS.smart,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: SHORT_RECIPE_SYSTEM_PROMPT },
+      { role: 'user', content: userMsg },
+    ],
+  })
+  let out = data.choices[0].message.content.trim()
+
+  if (out.length > SHORT_RECIPE_CHAR_LIMIT) {
+    const retry = await aiChat({
+      model: AI_MODELS.smart,
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: SHORT_RECIPE_SYSTEM_PROMPT },
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: out },
+        {
+          role: 'user',
+          content:
+            `That is ${out.length} characters — too long. Rewrite it to UNDER ` +
+            `${SHORT_RECIPE_CHAR_LIMIT} characters. Keep all ingredients and the numbered ` +
+            `steps, but tighten the wording. Output only the recipe text.`,
+        },
+      ],
+    })
+    out = retry.choices[0].message.content.trim()
+  }
+
+  return out
+}

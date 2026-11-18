@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { pb } from '../lib/pocketbase'
-import { preprocessToMarkdown } from '../lib/formatRecipe'
+import { preprocessToMarkdown, rewriteRecipeShort, SHORT_RECIPE_CHAR_LIMIT } from '../lib/formatRecipe'
 import { generateCaption, type CaptionPlatform } from '../lib/caption'
 import { groupCategories, type CategoryGroup } from '../lib/categories'
 import { classifyRecipeCategories, loadCategoryTaxonomy } from '../lib/recipeImport'
@@ -857,7 +857,7 @@ function RecipePreviewModal({ recipe: r, onClose, onEdit }: { recipe: Recipe; on
 
         {/* Recipe text + caption generator */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
-          <RecipeBody markdown={r.recipe_copy ? preprocessToMarkdown(r.recipe_copy) : ''} />
+          <RecipeBody recipeName={r.recipe_name} markdown={r.recipe_copy ? preprocessToMarkdown(r.recipe_copy) : ''} />
           {canCaption && (
             <div className="border-t border-gray-100 pt-5">
               <CaptionGenerator recipeName={r.recipe_name} platforms={r.platforms} />
@@ -931,12 +931,51 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   )
 }
 
-function RecipeBody({ markdown }: { markdown: string }) {
+// Rewrites the recipe into a compact numbered version (<900 chars) and copies it.
+function ShortCopyButton({ recipeName, recipeText }: { recipeName: string; recipeText: string }) {
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState('')
+
+  async function run() {
+    setLoading(true); setError('')
+    try {
+      const short = await rewriteRecipeShort(recipeName, recipeText)
+      await navigator.clipboard.writeText(short)
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to rewrite recipe.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {error && <span className="text-xs text-red-600 flex items-center gap-1"><AlertCircle size={12} /> {error}</span>}
+      <button
+        onClick={run}
+        disabled={loading}
+        title={`Rewrite under ${SHORT_RECIPE_CHAR_LIMIT} characters with numbered steps and copy`}
+        className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 flex-shrink-0"
+      >
+        {loading
+          ? <><Loader2 size={12} className="animate-spin" /> Rewriting…</>
+          : copied
+            ? <><Check size={12} className="text-green-600" /> Copied</>
+            : <><Sparkles size={12} /> Short copy</>}
+      </button>
+    </div>
+  )
+}
+
+function RecipeBody({ recipeName, markdown }: { recipeName: string; markdown: string }) {
   if (!markdown) return <p className="text-sm text-gray-400 italic">No recipe text added yet.</p>
 
   return (
     <div>
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-end items-center gap-2 mb-2">
+        <ShortCopyButton recipeName={recipeName} recipeText={toPlainText(markdown)} />
         <CopyButton text={toPlainText(markdown)} label="Copy recipe" />
       </div>
       <ReactMarkdown components={MD_COMPONENTS}>{markdown}</ReactMarkdown>
