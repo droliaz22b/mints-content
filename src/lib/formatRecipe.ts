@@ -91,6 +91,8 @@ export const SHORT_RECIPE_SYSTEM_PROMPT = `You are a recipe editor. Rewrite the 
 
 Output using this exact structure (plain text, no markdown):
 
+Recipe Name
+
 Ingredients:
 - ingredient with quantity
 - ingredient with quantity
@@ -100,6 +102,7 @@ Method:
 2. Clear concise step
 
 Rules:
+- Start with the recipe name on its own line, followed by a blank line.
 - The ENTIRE output MUST be under ${SHORT_RECIPE_CHAR_LIMIT} characters.
 - Keep every ingredient, but trim the wording.
 - Number every method step (1. 2. 3.) and keep each step short and actionable.
@@ -134,8 +137,8 @@ export async function rewriteRecipeShort(recipeName: string, recipeText: string)
           role: 'user',
           content:
             `That is ${out.length} characters — too long. Rewrite it to UNDER ` +
-            `${SHORT_RECIPE_CHAR_LIMIT} characters. Keep all ingredients and the numbered ` +
-            `steps, but tighten the wording. Output only the recipe text.`,
+            `${SHORT_RECIPE_CHAR_LIMIT} characters. Keep the recipe name on top, all ingredients ` +
+            `and the numbered steps, but tighten the wording. Output only the recipe text.`,
         },
       ],
     })
